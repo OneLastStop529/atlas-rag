@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS chunks(
 ON DELETE CASCADE,
   chunk_index INT NOT NULL,
   content TEXT NOT NULL,
-  embedding vector(1536) NOT NULL,
+  embedding vector(384) NOT NULL,
   meta JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_doc_id

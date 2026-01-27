@@ -1,10 +1,32 @@
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from .api.chat import router as chat_router
 from .api.upload import router as upload_router
+from .providers.factory import get_embeddings_provider
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Validate embeddings provider
+    try:
+        provider = get_embeddings_provider()
+        expected = int(os.getenv("EXPECTED_EMBEDDING_DIM", str(provider.dim)))
+        if provider.dim != expected:
+            raise ValueError(
+                f"Embeddings provider dimension {provider.dim} does not match expected {expected}"
+            )
+    except Exception as e:
+        print(f"Error initializing embeddings provider: {e}")
+        raise e
+    yield
+    # Shutdown: Any cleanup if necessary
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

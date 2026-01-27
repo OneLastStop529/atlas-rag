@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import List
+
+
+@dataclass
+class ChunkConfig:
+    chunk_chars: int = 2000
+    overlap_chars: int = 200
+
+
+def chunk_text(text: str, cfg: ChunkConfig) -> List[str]:
+    """
+    Simple, robust text chunking based on character count with overlap.
+    Good enough for v0 ingestion.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    if not text:
+        return []
+
+    chunks: List[str] = []
+    i = 0
+    n = len(text)
+
+    print(f"Total text length: {n} characters")
+
+    while i < n:
+        end = min(i + cfg.chunk_chars, n)
+        chunk = text[i:end]
+
+        # If we are not at the end, try to break at the last newline or space
+        last_newline = chunk.rfind("\n")
+        last_space = chunk.rfind("\n\n")
+        split_pos = max(last_newline, last_space)
+
+        if split_pos != -1 and split_pos > cfg.chunk_chars * 0.6:
+            end = i + split_pos + 1  # +1 to include the split character
+        chunk = text[i:end].strip()
+        print(f"Chunk from {i} to {end} (length {len(chunk)})")
+        if chunk:
+            chunks.append(chunk)
+
+        if end >= n:
+            break
+
+        i = max(end - cfg.overlap_chars, 0)  # Move back by overlap
+
+    return chunks
