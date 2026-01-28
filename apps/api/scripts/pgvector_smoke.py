@@ -1,6 +1,5 @@
 import uuid
 import traceback
-from huggingface_hub.inference._generated.types import visual_question_answering
 from psycopg2.extras import Json
 
 from app.db import get_conn

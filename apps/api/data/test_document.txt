@@ -1,0 +1,18 @@
+This is a sample document for testing the document upload functionality.
+
+Atlas RAG is a retrieval augmented generation platform that allows users to chat with documents using vector similarity search.
+
+The system works by:
+1. Breaking documents into chunks
+2. Creating vector embeddings for each chunk
+3. Storing chunks in a vector database
+4. Retrieving relevant chunks based on user queries
+5. Using retrieved chunks as context for AI responses
+
+This document contains multiple sentences to ensure proper chunking and embedding generation.
+
+It should be split into several chunks for testing the chunking functionality.
+
+The upload endpoint should be able to process this text and store it in the database successfully.
+
+End of test document.
