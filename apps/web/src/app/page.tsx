@@ -2,17 +2,19 @@
 
 import { useMemo, useRef, useState } from "react";
 import { streamChat } from "@/lib/sse";
+import { useChatSSE } from "@/hooks/useChatSSE";
 
-type Msg = { role: "user" | "assistant"; content: string };
 
 export default function Page() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
-  const runIdRef = useRef(0);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [citations, setCitations] = useState<any[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
+  const { messages, streaming, citations, send, stop, reset } = useChatSSE({
+    apiUrl,
+    collectionId: "default",
+    k: 5,
+    embedderProvider: "hash",
+  });
+
 
   const lastAssitant = useMemo(() => {
     const last = messages[messages.length - 1];
@@ -20,55 +22,8 @@ export default function Page() {
   }, [messages]);
 
 
-  async function onSend() {
-    console.log("onSend called", Date.now());
-    const runId = ++runIdRef.current;
-    const text = input.trim();
-    console.log("Input text:", text, "Streaming:", streaming);
-    if (!text || streaming) return;
 
-    setInput("");
-    setCitations([]);
-    setMessages((msg) => [...msg, { role: "user", content: text }, { role: "assistant", content: "" }]);
-    setStreaming(true);
 
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-
-    try {
-      await streamChat(
-        apiUrl,
-        { messages: [...messages, { role: "user", content: text }] },
-        ({ event, data }) => {
-          console.log("Received event:", event, data);
-          if (runId !== runIdRef.current) return; // ignore old runs
-          if (event === "token") {
-            setMessages((msgs) => {
-              const lastIdx = msgs.length - 1;
-              const last = msgs[lastIdx];
-              if (!last || last.role !== "assistant") return msgs;
-              const updated = { ...last, content: last.content + data.delta };
-              return [...msgs.slice(0, lastIdx), updated];
-            });
-          } else if (event === "citations") {
-            setCitations(data.items ?? []);
-          } else if (event === "error") {
-            console.log(data)
-          }
-        },
-        abortController.signal
-      );
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') console.error(err);
-    } finally {
-      setStreaming(false);
-      abortRef.current = null;
-    }
-  }
-
-  function onStop() {
-    abortRef.current?.abort();
-  }
 
 
   return (
@@ -90,15 +45,18 @@ export default function Page() {
           id="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { (e.key === "Enter" ? onSend() : null) }}
+          onKeyDown={(e) => { (e.key === "Enter" ? send(input) : null) && setInput("") }}
           placeholder="Ask a question..."
           style={{ flex: 1, padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
         />
-        <button onClick={onSend} disabled={streaming} style={{ padding: "10px 14px" }}>
+        <button onClick={() => { send(input); setInput("") }} disabled={streaming} style={{ padding: "10px 14px" }}>
           Send
         </button>
-        <button onClick={onStop} disabled={!streaming} style={{ padding: "10px 14px" }}>
+        <button onClick={stop} disabled={!streaming} style={{ padding: "10px 14px" }}>
           Stop
+        </button>
+        <button onClick={reset} disabled={streaming && messages.length === 0} style={{ padding: "10px 14px" }}>
+          Reset
         </button>
       </div>
       {citations.length > 0 && (
@@ -107,7 +65,9 @@ export default function Page() {
           <ul style={{ paddingLeft: 18 }}>
             {citations.map((c, idx) => (
               <li key={idx}>
-                {c.source ?? c.filename ?? "source"} {c.page ? `p ${c.page}` : ""} --{" "}
+                {c.source ?? "source"} {"--"}
+                {c.page ? `p ${c.page}` : ""} {"--"}
+                {c.chunk_index ? `chunk ${c.chunk_index}` : ""}
                 <span style={{ opacity: 0.8 }}>{c.snippet ?? ""}</span>
               </li>
             ))}

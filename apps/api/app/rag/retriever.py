@@ -3,10 +3,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from fastapi import APIRouter
+
 
 from app.db import get_conn
 from app.ingest.embeddings import Embedder
 from app.ingest.pgvector_dim import get_db_vector_dim
+
+router = APIRouter()
+
+
+@router.post("/retrieve")
+def retrieve(payload: dict):
+    chunks = retrieve_top_k(
+        query=payload["query"],
+        collection_id=payload.get("collection_id", "default"),
+        k=payload.get("k", 5),
+        embedder_provider=payload.get("embedder_provider", "hash"),
+    )
+    return {
+        "context": build_context(chunks, max_chars=4000),
+        "citations": to_citations(chunks),
+    }
 
 
 @dataclass
