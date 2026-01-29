@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.chat import router as chat_router
 from .api.upload import router as upload_router
+from .api.documents import router as document_router
+from .api.chunks import router as chunks_router
 from .providers.factory import get_embeddings_provider
 
 
@@ -44,3 +46,5 @@ def health_check():
 
 app.include_router(chat_router)
 app.include_router(upload_router)
+app.include_router(document_router)
+app.include_router(chunks_router)
