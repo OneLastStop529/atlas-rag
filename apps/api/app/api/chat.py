@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 import json
 import asyncio
+import re
 from typing import Any, List
 from typing import AsyncGenerator
 from app.rag.retriever import build_context, retrieve_top_k, to_citations
@@ -32,12 +33,12 @@ def _v0_answer(query: str, context: str) -> str:
         return f"I couldn't find any relevant information for your query: '{query}'."
 
     return (
-        "Here are the modt relevant snippets I found in your documents.\n\n"
+        "Here are the most relevant snippets I found in your documents.\n\n"
+        "----\n"
+        f"Question: {query}\n"
         "----\n\n"
-        f"Question: {query}\n\n"
-        "----\n\n"
-        f"{context}\n"
-        "----\n\n"
+        f"{context}\n\n"
+        "----\n"
         "Next step: replace this synthesizer with a real LLM-based one!"
     )
 
@@ -46,10 +47,10 @@ async def _stream_text_as_tokens(
     text: str, delay: float = 0.005
 ) -> AsyncGenerator[str, None]:
     """
-    Simple token streamer: streams character-by-character (works well for validating UI).
+    Simple token streamer: streams whitespace-aware chunks (works well for validating UI).
     Switch to word or real LLM deltas later.
     """
-    for token in text.split():
+    for token in re.findall(r"\S+|\s+", text):
         yield token
         if delay:
             await asyncio.sleep(delay)
@@ -93,7 +94,7 @@ async def chat(payload: dict):
             answer = _v0_answer(query, context)
 
             async for tok in _stream_text_as_tokens(answer):
-                yield sse("token", {"text": tok})
+                yield sse("token", {"delta": tok})
 
             yield sse("citations", {"items": citations})
             yield sse("done", {"ok": True})

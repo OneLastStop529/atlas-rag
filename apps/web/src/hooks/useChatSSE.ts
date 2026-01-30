@@ -76,9 +76,15 @@ export function useChatSSE({ apiUrl, onToken, onCitation, onError, onComplete }:
                   const lastIdx = msgs.length - 1;
                   const last = msgs[lastIdx];
                   if (!last || last.role !== "assistant") return msgs;
+                  const delta = tokenData.delta;
+                  const needsSpace =
+                    last.content.length > 0 &&
+                    !/\s$/.test(last.content) &&
+                    !/^\s/.test(delta) &&
+                    !/^[\]\)\.,!?;:]/.test(delta);
                   const updated = {
                     ...last,
-                    content: last.content + tokenData.delta
+                    content: needsSpace ? `${last.content} ${delta}` : last.content + delta
                   };
                   return [...msgs.slice(0, lastIdx), updated];
                 });
