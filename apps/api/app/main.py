@@ -8,7 +8,7 @@ from .api.chat import router as chat_router
 from .api.upload import router as upload_router
 from .api.documents import router as document_router
 from .api.chunks import router as chunks_router
-from .providers.factory import get_embeddings_provider
+from .providers.factory import get_embeddings_provider, get_llm_provider
 
 
 @asynccontextmanager
@@ -21,8 +21,9 @@ async def lifespan(app: FastAPI):
             raise ValueError(
                 f"Embeddings provider dimension {provider.dim} does not match expected {expected}"
             )
+        get_llm_provider()
     except Exception as e:
-        print(f"Error initializing embeddings provider: {e}")
+        print(f"Error initializing providers: {e}")
         raise e
     yield
     # Shutdown: Any cleanup if necessary

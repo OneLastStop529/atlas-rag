@@ -51,6 +51,27 @@ Start the API:
 uvicorn app.main:app --reload --port 8000
 ```
 
+### LLM provider configuration
+The chat endpoint streams responses from a configurable LLM provider.
+
+```
+# Choose provider: "ollama" (default) or "openai"
+LLM_PROVIDER=ollama
+
+# Ollama (local)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b
+
+# OpenAI (hosted)
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4o-mini
+# Optional: custom OpenAI-compatible base URL
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# Optional: override the system prompt. Supports {context} and {query}.
+LLM_SYSTEM_PROMPT=You are a helpful assistant. Use only the provided context.\nCONTEXT:\n{context}\n
+```
+
 ### 3) Run the frontend (Next.js)
 The frontend expects the API base URL via `NEXT_PUBLIC_API_URL` and defaults to
 `http://localhost:8000` if unset.
@@ -70,6 +91,13 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ### 4) Quick sanity check
 - API health: `GET http://localhost:8000/health`
 - Web app: `http://localhost:3000`
+- Stream chat (SSE):
+
+```bash
+curl -N http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What documents are loaded?"}]}'
+```
 
 ### Troubleshooting
 - If embeddings fail, ensure your DB vector dimension matches the embeddings model

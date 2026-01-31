@@ -1,10 +1,12 @@
+import asyncio
+import json
+import re
+from typing import Any, AsyncGenerator, List
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-import json
-import asyncio
-import re
-from typing import Any, List
-from typing import AsyncGenerator
+
+from app.providers.factory import get_llm_provider
 from app.rag.retriever import build_context, retrieve_top_k, to_citations
 
 
@@ -14,13 +16,6 @@ router = APIRouter()
 def sse(event: str, data: dict) -> str:
     """Format data as Server-Sent Events (SSE)."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
-
-
-def _latest_user_text(messages: List[dict[str, Any]]) -> str:
-    for message in reversed(messages):
-        if message["role"] == "user":
-            return message["content"]
-    return ""
 
 
 def _v0_answer(query: str, context: str) -> str:
@@ -56,7 +51,56 @@ async def _stream_text_as_tokens(
             await asyncio.sleep(delay)
 
 
-@router.post("/chat")
+def _parse_payload(payload: dict) -> dict[str, Any]:
+    return {
+        "collection_id": payload.get("collection_id") or "default",
+        "messages": payload.get("messages") or [],
+        "k": int(payload.get("k") or 5),
+        "embedder_provider": payload.get("embedder_provider") or "hash",
+    }
+
+
+async def _stream_llm_answer(
+    *, llm, query: str, context: str
+) -> AsyncGenerator[str, None]:
+    llm_messages = llm.build_llm_messages(query=query, context=context)
+    async for chunk in llm.stream_chat(llm_messages):
+        delta = chunk.get("delta")
+        if delta:
+            yield sse("token", {"delta": delta})
+
+
+async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
+    try:
+        params = _parse_payload(payload)
+        llm = get_llm_provider()
+        query = llm.latest_user_text(params["messages"])
+
+        if not query:
+            yield sse("error", {"message": "No user query found in messages"})
+            yield sse("done", {})
+            return
+
+        chunks = retrieve_top_k(
+            query=query,
+            collection_id=params["collection_id"],
+            k=params["k"],
+            embedder_provider=params["embedder_provider"],
+        )
+        context = build_context(chunks, max_chars=4000)
+        citations = to_citations(chunks)
+
+        async for chunk in _stream_llm_answer(llm=llm, query=query, context=context):
+            yield chunk
+
+        yield sse("citations", {"items": citations})
+        yield sse("done", {"ok": True})
+    except Exception as e:
+        yield sse("error", {"message": str(e)})
+        yield sse("done", {"ok": False})
+
+
+@router.post("/api/chat")
 async def chat(payload: dict):
     """
     Expected paylod:
@@ -67,47 +111,11 @@ async def chat(payload: dict):
             "embedder_provider": "hash" | "sentence-transformers",
         }
     """
-    collection_id: str = payload.get("collection_id") or "default"
-    messages = payload.get("messages") or []
-    k = int(payload.get("k") or 5)
-
-    embedder_provider: str = payload.get("embedder_provider") or "hash"
-
-    query = _latest_user_text(messages)
-
-    async def event_stream() -> AsyncGenerator[str, None]:
-        try:
-            if not query:
-                yield sse("error", {"message": "No user query found in messages"})
-                yield sse("done", {})
-                return
-
-            chunks = retrieve_top_k(
-                query=query,
-                collection_id=collection_id,
-                k=k,
-                embedder_provider=embedder_provider,
-            )
-            context = build_context(chunks, max_chars=4000)
-            citations = to_citations(chunks)
-
-            answer = _v0_answer(query, context)
-
-            async for tok in _stream_text_as_tokens(answer):
-                yield sse("token", {"delta": tok})
-
-            yield sse("citations", {"items": citations})
-            yield sse("done", {"ok": True})
-
-        except Exception as e:
-            yield sse("error", {"message": str(e)})
-            yield sse("done", {"ok": False})
-
     headers = {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
     }
 
     return StreamingResponse(
-        event_stream(), headers=headers, media_type="text/event-stream"
+        _event_stream(payload), headers=headers, media_type="text/event-stream"
     )
