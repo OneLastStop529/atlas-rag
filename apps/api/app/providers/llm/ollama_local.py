@@ -20,22 +20,21 @@ class OllamaLocal(LLMProvider):
         self.base_url = (
             base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
         ).rstrip("/")
-        self.timeout_s = timeout_s
+        env_timeout = os.getenv("OLLAMA_TIMEOUT_S") or os.getenv("LLM_TIMEOUT_S")
+        self.timeout_s = float(env_timeout) if env_timeout else timeout_s
         self.name = f"ollama_{self.model}"
 
     async def stream_chat(
         self, messages: List[Dict[str, Any]], **kwargs: Any
     ) -> AsyncIterator[Dict[str, Any]]:
-        prompt = self.messages_to_prompt(messages)
         payload = {
             "model": self.model,
-            "prompt": prompt,
+            "messages": messages,
             "stream": True,
         }
         payload.update(kwargs)
-        print("Ollama payload:", payload)
 
-        url = f"{self.base_url}/api/generate"
+        url = f"{self.base_url}/api/chat"
         async with httpx.AsyncClient(timeout=self.timeout_s) as client:
             async with client.stream(
                 "POST", url, headers={"Content-Type": "application/json"}, json=payload
@@ -48,8 +47,9 @@ class OllamaLocal(LLMProvider):
                         chunk = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    response = chunk.get("response") or {}
-                    if response:
-                        yield {"delta": response}
+                    message = chunk.get("message") or {}
+                    content = message.get("content")
+                    if content:
+                        yield {"delta": content}
                     if chunk.get("done") is True:
                         break

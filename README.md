@@ -58,6 +58,9 @@ The chat endpoint streams responses from a configurable LLM provider.
 # Choose provider: "ollama" (default) or "openai"
 LLM_PROVIDER=ollama
 
+# Optional: timeout (seconds) for all LLM calls
+LLM_TIMEOUT_S=60
+
 # Ollama (local)
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
@@ -97,6 +100,26 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 curl -N http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"What documents are loaded?"}]}'
+```
+
+Expected SSE events: `token`, `citations`, `done` (and `error` on failure).
+
+### SSE contract
+Endpoint: `POST /api/chat` (content-type `application/json`, response `text/event-stream`)
+
+Event types:
+```
+event: token
+data: {"delta":"..."}
+
+event: citations
+data: {"items":[{"chunk_id":"...","document_id":"...","source":"...","page":1,"chunk_index":0,"distance":0.12,"snippet":"...","metadata":{}}]}
+
+event: error
+data: {"message":"..."}
+
+event: done
+data: {"ok":true}
 ```
 
 ### Troubleshooting
