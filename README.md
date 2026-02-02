@@ -76,6 +76,12 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_SYSTEM_PROMPT=You are a helpful assistant. Use only the provided context.\nCONTEXT:\n{context}\n
 ```
 
+LLM test endpoint:
+```
+POST /api/llm/test
+body: { "provider": "ollama|openai", "model": "...", "base_url": "..." }
+```
+
 ### 3) Run the frontend (Next.js)
 The frontend expects the API base URL via `NEXT_PUBLIC_API_URL` and defaults to
 `http://localhost:8000` if unset.
