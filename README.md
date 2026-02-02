@@ -55,7 +55,7 @@ uvicorn app.main:app --reload --port 8000
 The chat endpoint streams responses from a configurable LLM provider.
 
 ```
-# Choose provider: "ollama" (default) or "openai"
+# Choose provider: "ollama" (default) or "openai" (case-insensitive)
 LLM_PROVIDER=ollama
 
 # Optional: timeout (seconds) for all LLM calls

@@ -32,7 +32,7 @@ def reset_embeddings_provider_cache():
 
 @lru_cache(maxsize=1)
 def get_llm_provider():
-    llm_provider_type = os.getenv("LLM_PROVIDER", "ollama")
+    llm_provider_type = (os.getenv("LLM_PROVIDER", "ollama") or "ollama").strip().lower()
     if llm_provider_type == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
