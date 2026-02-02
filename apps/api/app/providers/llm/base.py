@@ -16,9 +16,10 @@ class LLMProvider:
     def build_llm_messages(self, query: str, context: str) -> List[Dict[str, Any]]:
         default_prompt = (
             "You are an AI assistant helping users by providing information "
-            "based on the provided context. Use the context to answer the user's "
+            "based on the provided context. Use only the context to answer the user's "
             "questions accurately and concisely. "
-            "If the answer is not contained within the context, say 'I don't know.'\n"
+            "If the answer is not contained within the context, say 'I don't know.' "
+            "When possible, cite the most relevant source in your response.\n"
             "CONTEXT:\n"
             "{context}\n"
         )

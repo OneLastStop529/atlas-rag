@@ -72,6 +72,7 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Optional: override the system prompt. Supports {context} and {query}.
+# Example: "Use only the context.\nCONTEXT:\n{context}\nQUESTION:\n{query}\n"
 LLM_SYSTEM_PROMPT=You are a helpful assistant. Use only the provided context.\nCONTEXT:\n{context}\n
 ```
 
