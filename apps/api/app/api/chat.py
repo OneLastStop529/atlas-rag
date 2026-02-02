@@ -1,12 +1,15 @@
 import asyncio
 import json
+import os
 import re
 from typing import Any, AsyncGenerator, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.providers.factory import get_llm_provider
+from app.providers.llm.openai_llm import OpenAILLM
+from app.providers.llm.ollama_local import OllamaLocal
 from app.rag.retriever import build_context, retrieve_top_k, to_citations
 
 
@@ -57,7 +60,32 @@ def _parse_payload(payload: dict) -> dict[str, Any]:
         "messages": payload.get("messages") or [],
         "k": int(payload.get("k") or 5),
         "embedder_provider": payload.get("embedder_provider") or "hash",
+        "llm_provider": payload.get("llm_provider"),
+        "llm_model": payload.get("llm_model"),
+        "llm_base_url": payload.get("llm_base_url"),
     }
+
+
+def _build_llm_provider(
+    provider: str | None, model: str | None, base_url: str | None
+):
+    provider_name = (provider or os.getenv("LLM_PROVIDER", "ollama")).strip().lower()
+    if provider_name == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=400, detail="OPENAI_API_KEY is required for OpenAI tests."
+            )
+        model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        return OpenAILLM(api_key=api_key, model=model, base_url=base_url)
+
+    if provider_name in {"ollama", "ollama_local"}:
+        model = model or os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+        base_url = base_url or os.getenv("OLLAMA_BASE_URL")
+        return OllamaLocal(model=model, base_url=base_url)
+
+    raise HTTPException(status_code=400, detail=f"Unknown LLM provider: {provider_name}")
 
 
 async def _stream_llm_answer(
@@ -73,7 +101,12 @@ async def _stream_llm_answer(
 async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
     try:
         params = _parse_payload(payload)
-        llm = get_llm_provider()
+        if params["llm_provider"] or params["llm_model"] or params["llm_base_url"]:
+            llm = _build_llm_provider(
+                params["llm_provider"], params["llm_model"], params["llm_base_url"]
+            )
+        else:
+            llm = get_llm_provider()
         query = llm.latest_user_text(params["messages"])
 
         if not query:
@@ -119,3 +152,25 @@ async def chat(payload: dict):
     return StreamingResponse(
         _event_stream(payload), headers=headers, media_type="text/event-stream"
     )
+
+
+@router.post("/api/llm/test")
+async def test_llm(payload: dict):
+    provider = payload.get("provider")
+    model = payload.get("model")
+    base_url = payload.get("base_url")
+    messages = payload.get("messages") or [{"role": "user", "content": "ping"}]
+    max_tokens = payload.get("max_tokens") or 8
+
+    llm = _build_llm_provider(provider, model, base_url)
+
+    try:
+        sample = ""
+        async for chunk in llm.stream_chat(messages, max_tokens=max_tokens):
+            delta = chunk.get("delta")
+            if delta:
+                sample = delta
+                break
+        return {"ok": True, "provider": llm.name, "sample": sample}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

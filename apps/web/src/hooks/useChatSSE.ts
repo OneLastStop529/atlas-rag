@@ -20,6 +20,9 @@ export interface UseChatSSEOptions {
   collectionId?: string;
   k?: number;
   embedderProvider?: string;
+  llmProvider?: string;
+  llmModel?: string;
+  llmBaseUrl?: string;
   onToken?: (delta: string) => void;
   onCitation?: (citations: Citation[]) => void;
   onError?: (error: Error) => void;
@@ -35,7 +38,16 @@ export type StreamSSEEvent =
 
 
 
-export function useChatSSE({ apiUrl, onToken, onCitation, onError, onComplete }: UseChatSSEOptions) {
+export function useChatSSE({
+  apiUrl,
+  llmProvider,
+  llmModel,
+  llmBaseUrl,
+  onToken,
+  onCitation,
+  onError,
+  onComplete,
+}: UseChatSSEOptions) {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -64,7 +76,12 @@ export function useChatSSE({ apiUrl, onToken, onCitation, onError, onComplete }:
     try {
       await streamChat(
         apiUrl,
-        { messages: [...messages, { role: "user", content: text }] },
+        {
+          messages: [...messages, { role: "user", content: text }],
+          llm_provider: llmProvider,
+          llm_model: llmModel,
+          llm_base_url: llmBaseUrl,
+        },
         ({ event, data }: SseEvent) => {
           if (runId !== runIdRef.current) return; // Ignore old runs
 
@@ -126,7 +143,7 @@ export function useChatSSE({ apiUrl, onToken, onCitation, onError, onComplete }:
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [apiUrl, messages, streaming, onToken, onCitation, onError, onComplete]);
+  }, [apiUrl, messages, streaming, llmProvider, llmModel, llmBaseUrl, onToken, onCitation, onError, onComplete]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

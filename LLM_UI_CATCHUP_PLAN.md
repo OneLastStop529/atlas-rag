@@ -43,6 +43,8 @@ Acceptance
 ### 2.1: LLM settings panel
 - Add inputs for model name and base URL (for TGI / local setup).
 - Add a "Test Connection" button (like rag_demo’s Ollama test).
+ - Persist LLM settings client-side (localStorage) so they survive refreshes.
+ - Allow chat requests to override the server default LLM via provider/model/base URL.
 
 Acceptance
 - Users can verify LLM availability from the UI.

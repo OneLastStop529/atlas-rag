@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { streamChat } from "@/lib/sse";
 import { useChatSSE } from "@/hooks/useChatSSE";
 import { getChunk, Chunk } from "@/lib/api";
@@ -12,6 +12,11 @@ export default function Page() {
   const [selected, setSelected] = useState<Chunk | null>(null);
   const [selectedErr, setSelectedErr] = useState<string | null>(null);
   const [loadingChunk, setLoadingChunk] = useState(false);
+  const [llmProvider, setLlmProvider] = useState("ollama");
+  const [llmModel, setLlmModel] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [testingLlm, setTestingLlm] = useState(false);
+  const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
 
   async function openCitation(chunkId: string) {
     setSelected(null);
@@ -32,14 +37,68 @@ export default function Page() {
     collectionId: "default",
     k: 5,
     embedderProvider: "hash",
+    llmProvider,
+    llmModel: llmModel || undefined,
+    llmBaseUrl: llmBaseUrl || undefined,
   });
 
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedProvider = window.localStorage.getItem("llm.provider");
+    const storedModel = window.localStorage.getItem("llm.model");
+    const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
+    if (storedProvider) setLlmProvider(storedProvider);
+    if (storedModel) setLlmModel(storedModel);
+    if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("llm.provider", llmProvider);
+    window.localStorage.setItem("llm.model", llmModel);
+    window.localStorage.setItem("llm.baseUrl", llmBaseUrl);
+  }, [llmProvider, llmModel, llmBaseUrl]);
 
   const lastAssitant = useMemo(() => {
     const last = messages[messages.length - 1];
     return last?.role === "assistant" ? last.content : "";
   }, [messages]);
 
+  async function testLlmConnection() {
+    setTestingLlm(true);
+    setLlmTestStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/api/llm/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: llmProvider,
+          model: llmModel || undefined,
+          base_url: llmBaseUrl || undefined,
+          messages: [{ role: "user", content: "ping" }],
+          max_tokens: 8,
+        }),
+      });
+
+      let detail = "";
+      try {
+        const data = await response.json();
+        if (!response.ok) detail = data?.detail || "Test failed";
+        else detail = `OK: ${data?.provider || "llm"}${data?.sample ? " - " + data.sample : ""}`;
+      } catch {
+        if (!response.ok) detail = `HTTP ${response.status}`;
+        else detail = "OK";
+      }
+
+      if (!response.ok) throw new Error(detail);
+      setLlmTestStatus(detail);
+    } catch (err: any) {
+      setLlmTestStatus(err?.message || "Test failed");
+    } finally {
+      setTestingLlm(false);
+    }
+  }
 
 
 
@@ -48,6 +107,47 @@ export default function Page() {
   return (
     <main style={{ maxWidth: 900, margin: "40px auto", }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Atlas RAG</h1>
+
+      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>LLM Settings</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Provider</span>
+            <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}>
+              <option value="ollama">ollama</option>
+              <option value="openai">openai</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 220 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Model</span>
+            <input
+              value={llmModel}
+              onChange={(e) => setLlmModel(e.target.value)}
+              placeholder="e.g. llama3.1:8b"
+              style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 260 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Base URL</span>
+            <input
+              value={llmBaseUrl}
+              onChange={(e) => setLlmBaseUrl(e.target.value)}
+              placeholder="http://localhost:11434"
+              style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            />
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, justifyContent: "flex-end" }}>
+            <button onClick={testLlmConnection} disabled={testingLlm} style={{ padding: "8px 12px" }}>
+              {testingLlm ? "Testing..." : "Test Connection"}
+            </button>
+          </div>
+        </div>
+        {llmTestStatus && (
+          <div style={{ marginTop: 8, fontSize: 12, color: llmTestStatus.startsWith("OK") ? "green" : "crimson" }}>
+            {llmTestStatus}
+          </div>
+        )}
+      </section>
 
       <div style={{ border: "1pc solid #ddd", borderRadius: 12, padding: 12, minHeight: 280 }}>
         {messages.map((msg, idx) => (
@@ -151,4 +251,3 @@ export default function Page() {
     </main>
   );
 }
-
