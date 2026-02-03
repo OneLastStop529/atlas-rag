@@ -40,6 +40,8 @@ export type StreamSSEEvent =
 
 export function useChatSSE({
   apiUrl,
+  k,
+  embedderProvider,
   llmProvider,
   llmModel,
   llmBaseUrl,
@@ -78,6 +80,8 @@ export function useChatSSE({
         apiUrl,
         {
           messages: [...messages, { role: "user", content: text }],
+          k,
+          embedder_provider: embedderProvider,
           llm_provider: llmProvider,
           llm_model: llmModel,
           llm_base_url: llmBaseUrl,
@@ -143,7 +147,20 @@ export function useChatSSE({
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [apiUrl, messages, streaming, llmProvider, llmModel, llmBaseUrl, onToken, onCitation, onError, onComplete]);
+  }, [
+    apiUrl,
+    messages,
+    streaming,
+    k,
+    embedderProvider,
+    llmProvider,
+    llmModel,
+    llmBaseUrl,
+    onToken,
+    onCitation,
+    onError,
+    onComplete,
+  ]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

@@ -15,6 +15,8 @@ export default function Page() {
   const [llmProvider, setLlmProvider] = useState("ollama");
   const [llmModel, setLlmModel] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [topK, setTopK] = useState(5);
+  const [advancedRetrieval, setAdvancedRetrieval] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
 
@@ -35,7 +37,7 @@ export default function Page() {
   const { messages, streaming, citations, send, stop, reset } = useChatSSE({
     apiUrl,
     collectionId: "default",
-    k: 5,
+    k: topK,
     embedderProvider: "hash",
     llmProvider,
     llmModel: llmModel || undefined,
@@ -48,9 +50,11 @@ export default function Page() {
     const storedProvider = window.localStorage.getItem("llm.provider");
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
+    const storedTopK = window.localStorage.getItem("rag.topK");
     if (storedProvider) setLlmProvider(storedProvider);
     if (storedModel) setLlmModel(storedModel);
     if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
+    if (storedTopK) setTopK(Number(storedTopK) || 5);
   }, []);
 
   useEffect(() => {
@@ -58,6 +62,7 @@ export default function Page() {
     window.localStorage.setItem("llm.provider", llmProvider);
     window.localStorage.setItem("llm.model", llmModel);
     window.localStorage.setItem("llm.baseUrl", llmBaseUrl);
+    window.localStorage.setItem("rag.topK", String(topK));
   }, [llmProvider, llmModel, llmBaseUrl]);
 
   const lastAssitant = useMemo(() => {
@@ -147,6 +152,32 @@ export default function Page() {
             {llmTestStatus}
           </div>
         )}
+      </section>
+
+      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Retrieval Controls</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Top-k</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={topK}
+              onChange={(e) => setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+              style={{ width: 120, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }} title="Advanced retrieval not available yet">
+            <input
+              type="checkbox"
+              checked={advancedRetrieval}
+              onChange={(e) => setAdvancedRetrieval(e.target.checked)}
+              disabled
+            />
+            <span style={{ fontSize: 13, opacity: 0.7 }}>Advanced retrieval (coming soon)</span>
+          </label>
+        </div>
       </section>
 
       <div style={{ border: "1pc solid #ddd", borderRadius: 12, padding: 12, minHeight: 280 }}>
