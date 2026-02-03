@@ -66,9 +66,7 @@ def _parse_payload(payload: dict) -> dict[str, Any]:
     }
 
 
-def _build_llm_provider(
-    provider: str | None, model: str | None, base_url: str | None
-):
+def _build_llm_provider(provider: str | None, model: str | None, base_url: str | None):
     provider_name = (provider or os.getenv("LLM_PROVIDER", "ollama")).strip().lower()
     if provider_name == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
@@ -85,7 +83,9 @@ def _build_llm_provider(
         base_url = base_url or os.getenv("OLLAMA_BASE_URL")
         return OllamaLocal(model=model, base_url=base_url)
 
-    raise HTTPException(status_code=400, detail=f"Unknown LLM provider: {provider_name}")
+    raise HTTPException(
+        status_code=400, detail=f"Unknown LLM provider: {provider_name}"
+    )
 
 
 async def _stream_llm_answer(
@@ -113,6 +113,8 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
             yield sse("error", {"message": "No user query found in messages"})
             yield sse("done", {})
             return
+
+        print(params)
 
         chunks = retrieve_top_k(
             query=query,

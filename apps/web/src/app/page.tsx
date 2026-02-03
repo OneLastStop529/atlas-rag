@@ -20,6 +20,7 @@ export default function Page() {
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ id: string; question: string; answer: string; expanded: boolean }>>([]);
+  const lastHistoryKeyRef = useRef<string>("");
 
   async function openCitation(chunkId: string) {
     setSelected(null);
@@ -43,18 +44,6 @@ export default function Page() {
     llmProvider,
     llmModel: llmModel || undefined,
     llmBaseUrl: llmBaseUrl || undefined,
-    onComplete: () => {
-      const lastUser = [...messages].reverse().find((m) => m.role === "user");
-      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-      if (!lastUser || !lastAssistant) return;
-      const entry = {
-        id: `${Date.now()}`,
-        question: lastUser.content,
-        answer: lastAssistant.content,
-        expanded: false,
-      };
-      setHistory((items) => [entry, ...items].slice(0, 5));
-    },
   });
 
 
@@ -91,6 +80,23 @@ export default function Page() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("rag.history", JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    if (streaming) return;
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!lastUser || !lastAssistant) return;
+    const key = `${lastUser.content}::${lastAssistant.content}`;
+    if (key === lastHistoryKeyRef.current) return;
+    lastHistoryKeyRef.current = key;
+    const entry = {
+      id: `${Date.now()}`,
+      question: lastUser.content,
+      answer: lastAssistant.content,
+      expanded: false,
+    };
+    setHistory((items) => [entry, ...items].slice(0, 5));
+  }, [streaming, messages]);
 
   const lastAssitant = useMemo(() => {
     const last = messages[messages.length - 1];
