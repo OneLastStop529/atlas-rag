@@ -122,6 +122,7 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
             k=params["k"],
             embedder_provider=params["embedder_provider"],
         )
+        print(f"retrieval_count={len(chunks)} collection_id={params['collection_id']}")
         context = build_context(chunks, max_chars=4000)
         citations = to_citations(chunks)
 
