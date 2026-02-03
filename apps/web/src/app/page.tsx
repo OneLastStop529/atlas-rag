@@ -19,6 +19,7 @@ export default function Page() {
   const [advancedRetrieval, setAdvancedRetrieval] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
+  const [history, setHistory] = useState<Array<{ id: string; question: string; answer: string; expanded: boolean }>>([]);
 
   async function openCitation(chunkId: string) {
     setSelected(null);
@@ -42,6 +43,18 @@ export default function Page() {
     llmProvider,
     llmModel: llmModel || undefined,
     llmBaseUrl: llmBaseUrl || undefined,
+    onComplete: () => {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+      if (!lastUser || !lastAssistant) return;
+      const entry = {
+        id: `${Date.now()}`,
+        question: lastUser.content,
+        answer: lastAssistant.content,
+        expanded: false,
+      };
+      setHistory((items) => [entry, ...items].slice(0, 5));
+    },
   });
 
 
@@ -51,10 +64,19 @@ export default function Page() {
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
     const storedTopK = window.localStorage.getItem("rag.topK");
+    const storedHistory = window.localStorage.getItem("rag.history");
     if (storedProvider) setLlmProvider(storedProvider);
     if (storedModel) setLlmModel(storedModel);
     if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
     if (storedTopK) setTopK(Number(storedTopK) || 5);
+    if (storedHistory) {
+      try {
+        const parsed = JSON.parse(storedHistory);
+        if (Array.isArray(parsed)) setHistory(parsed.slice(0, 5));
+      } catch {
+        // Ignore malformed storage
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -63,7 +85,12 @@ export default function Page() {
     window.localStorage.setItem("llm.model", llmModel);
     window.localStorage.setItem("llm.baseUrl", llmBaseUrl);
     window.localStorage.setItem("rag.topK", String(topK));
-  }, [llmProvider, llmModel, llmBaseUrl]);
+  }, [llmProvider, llmModel, llmBaseUrl, topK]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("rag.history", JSON.stringify(history));
+  }, [history]);
 
   const lastAssitant = useMemo(() => {
     const last = messages[messages.length - 1];
@@ -189,6 +216,37 @@ export default function Page() {
         ))}
         {messages.length === 0 && <div style={{ opacity: 0.6 }}>Ask something...</div>}
       </div>
+
+      {history.length > 0 && (
+        <section style={{ marginTop: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Recent Q&A</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {history.map((item) => (
+              <div key={item.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Q</div>
+                <div style={{ fontWeight: 600 }}>{item.question}</div>
+                <button
+                  onClick={() =>
+                    setHistory((items) =>
+                      items.map((entry) =>
+                        entry.id === item.id
+                          ? { ...entry, expanded: !entry.expanded }
+                          : entry
+                      )
+                    )
+                  }
+                  style={{ marginTop: 6, fontSize: 12, textDecoration: "underline", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                >
+                  {item.expanded ? "Hide answer" : "Show answer"}
+                </button>
+                {item.expanded && (
+                  <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{item.answer}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <input
