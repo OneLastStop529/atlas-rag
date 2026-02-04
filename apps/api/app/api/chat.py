@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from app.providers.factory import get_llm_provider
 from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
-from app.rag.retriever import build_context, retrieve_top_k, to_citations
+from app.rag.retriever import build_context, retrieve_top_k, to_citations, get_reformulations
 
 
 router = APIRouter()
@@ -116,6 +116,12 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
             return
 
         print(params)
+
+        reformulations = get_reformulations(
+            query, use_reranking=params["use_reranking"]
+        )
+        if params["use_reranking"]:
+            yield sse("reformulations", {"items": reformulations})
 
         chunks = retrieve_top_k(
             query=query,

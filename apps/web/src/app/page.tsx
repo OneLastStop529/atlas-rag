@@ -20,6 +20,7 @@ export default function Page() {
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ id: string; question: string; answer: string; expanded: boolean }>>([]);
+  const [reformulations, setReformulations] = useState<string[]>([]);
   const lastHistoryKeyRef = useRef<string>("");
 
   async function openCitation(chunkId: string) {
@@ -45,6 +46,7 @@ export default function Page() {
     llmProvider,
     llmModel: llmModel || undefined,
     llmBaseUrl: llmBaseUrl || undefined,
+    onReformulations: (items) => setReformulations(items),
   });
 
 
@@ -223,6 +225,19 @@ export default function Page() {
         ))}
         {messages.length === 0 && <div style={{ opacity: 0.6 }}>Ask something...</div>}
       </div>
+
+      {advancedRetrieval && reformulations.length > 0 && (
+        <section style={{ marginTop: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Reformulations</h2>
+          <ul style={{ paddingLeft: 18, margin: 0 }}>
+            {reformulations.map((item, idx) => (
+              <li key={`${item}-${idx}`} style={{ opacity: 0.8 }}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {history.length > 0 && (
         <section style={{ marginTop: 16 }}>

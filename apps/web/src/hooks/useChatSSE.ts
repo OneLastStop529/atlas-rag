@@ -26,6 +26,7 @@ export interface UseChatSSEOptions {
   llmBaseUrl?: string;
   onToken?: (delta: string) => void;
   onCitation?: (citations: Citation[]) => void;
+  onReformulations?: (items: string[]) => void;
   onError?: (error: Error) => void;
   onComplete?: () => void;
 }
@@ -49,6 +50,7 @@ export function useChatSSE({
   llmBaseUrl,
   onToken,
   onCitation,
+  onReformulations,
   onError,
   onComplete,
 }: UseChatSSEOptions) {
@@ -93,6 +95,13 @@ export function useChatSSE({
           if (runId !== runIdRef.current) return; // Ignore old runs
 
           switch (event) {
+            case "reformulations":
+              const reformData = data as { items?: string[] };
+              if (Array.isArray(reformData.items)) {
+                onReformulations?.(reformData.items);
+              }
+              break;
+
             case "token":
               const tokenData = data as { delta?: string };
               if (typeof tokenData.delta === 'string') {

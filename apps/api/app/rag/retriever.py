@@ -145,6 +145,12 @@ def _simple_reformulations(query: str) -> List[str]:
     return out
 
 
+def get_reformulations(query: str, *, use_reranking: bool) -> List[str]:
+    if not query:
+        return []
+    return _simple_reformulations(query) if use_reranking else [query]
+
+
 def _rrf_fuse(results: Iterable[List[RetrievedChunk]], *, rrf_k: int = 60) -> List[RetrievedChunk]:
     scores: Dict[str, float] = {}
     chunks: Dict[str, RetrievedChunk] = {}
