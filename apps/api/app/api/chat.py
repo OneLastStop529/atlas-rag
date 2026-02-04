@@ -60,6 +60,7 @@ def _parse_payload(payload: dict) -> dict[str, Any]:
         "messages": payload.get("messages") or [],
         "k": int(payload.get("k") or 5),
         "embedder_provider": payload.get("embedder_provider") or "hash",
+        "use_reranking": bool(payload.get("use_reranking", False)),
         "llm_provider": payload.get("llm_provider"),
         "llm_model": payload.get("llm_model"),
         "llm_base_url": payload.get("llm_base_url"),
@@ -121,6 +122,7 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
             collection_id=params["collection_id"],
             k=params["k"],
             embedder_provider=params["embedder_provider"],
+            use_reranking=params["use_reranking"],
         )
         print(f"retrieval_count={len(chunks)} collection_id={params['collection_id']}")
         context = build_context(chunks, max_chars=4000)

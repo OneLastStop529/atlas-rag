@@ -9,6 +9,7 @@
 - Confirm current chat endpoint contract and SSE events.
 - Add basic error handling and timeouts around LLM calls.
 - Document env vars for LLM provider selection in one place.
+ - Defer Prometheus-style metrics to a later milestone (use lightweight logs for now).
 
 Deliverables
 - Short README section describing LLM provider config and expected env vars.
@@ -88,6 +89,7 @@ Acceptance
 - Should we prioritize local HF model loading or external TGI first?
 - Do we want to keep the current “hash” embedder for demo mode?
 - Is there an existing UI design system to align with?
+- Defer investigating non-deterministic LLM responses (e.g., “I don’t know” on first query) to a later milestone.
 
 ## Suggested Order of Execution
 1) Milestone 1 (LLM integration)

@@ -41,6 +41,7 @@ export default function Page() {
     collectionId: "default",
     k: topK,
     embedderProvider: "hash",
+    useReranking: advancedRetrieval,
     llmProvider,
     llmModel: llmModel || undefined,
     llmBaseUrl: llmBaseUrl || undefined,
