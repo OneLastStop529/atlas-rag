@@ -1,26 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
 from fastapi import APIRouter
-
-
-from app.db import get_conn
-from app.ingest.embeddings import Embedder
-from app.ingest.pgvector_dim import get_db_vector_dim
+from app.rag.retrievers.factory import get_retriever
+from app.rag.retrievers.types import RetrievedChunk
 
 router = APIRouter()
 
 
 @router.post("/retrieve")
 def retrieve(payload: dict):
-    chunks = retrieve_top_k(
+    chunks = retrieve_chunks(
         query=payload["query"],
         collection_id=payload.get("collection_id", "default"),
         k=payload.get("k", 5),
         embedder_provider=payload.get("embedder_provider", "hash"),
+        retriever_provider=payload.get("retriever_provider"),
         use_reranking=payload.get("use_reranking", False),
     )
     return {
@@ -29,32 +26,18 @@ def retrieve(payload: dict):
     }
 
 
-@dataclass
-class RetrievedChunk:
-    """Data class representing a retrieved chunk with metadata."""
-
-    chunk_id: str
-    document_id: str
-    content: str
-    chunk_index: int
-    collection_id: Optional[str]
-    similarity: float
-    source: str
-    meta: Dict[str, Any]
-    rerank_score: Optional[float] = None
-
-
-def retrieve_top_k(
+def retrieve_chunks(
     query: str,
     k: int,
     collection_id: Optional[str] = None,
     embedder_provider: str = "hash",
+    retriever_provider: Optional[str] = None,
     use_reranking: bool = False,
     rrf_k: int = 60,
     per_query_k: Optional[int] = None,
 ) -> List[RetrievedChunk]:
     """
-    Retrieve top k chunks for a given query.
+    Retrieve chunks for a given query.
 
     Args:
         query: Search query text
@@ -65,7 +48,7 @@ def retrieve_top_k(
         per_query_k: How many results to retrieve per reformulation before fusion
 
     Returns:
-        List of top k RetrievedChunk objects
+        List of RetrievedChunk objects
     """
     if not query:
         return []
@@ -73,57 +56,16 @@ def retrieve_top_k(
     reformulations = _simple_reformulations(query) if use_reranking else [query]
     per_query_k = per_query_k or (max(k, 10) if use_reranking else k)
 
+    retriever = get_retriever(retriever_provider, embedder_provider=embedder_provider)
     results_by_query: List[List[RetrievedChunk]] = []
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            dim = get_db_vector_dim(cur)
-            embedder = Embedder(dim=dim, provider=embedder_provider)
-
-            for q in reformulations:
-                qvec = embedder.embed_batch([q])[0]
-                cur.execute(
-                    """
-                    SELECT
-                        c.id::text as chunk_id,
-                        c.document_id::text as document_id,
-                        c.chunk_index,
-                        c.content,
-                        (c.embedding <=> %s::vector) AS similarity,
-                        d.file_name,
-                        c.meta
-                    FROM chunks c
-                    JOIN documents d ON c.document_id = d.id
-                    WHERE (%s IS NULL OR d.collection_id = %s)
-                    ORDER BY c.embedding <=> (%s)::vector
-                    LIMIT %s
-                    """,
-                    (qvec, collection_id, collection_id, qvec, per_query_k),
-                )
-                rows = cur.fetchall()
-
-                out: List[RetrievedChunk] = []
-                for (
-                    chunk_id,
-                    document_id,
-                    chunk_index,
-                    content,
-                    similarity,
-                    source,
-                    meta,
-                ) in rows:
-                    out.append(
-                        RetrievedChunk(
-                            chunk_id=chunk_id,
-                            document_id=document_id,
-                            content=content,
-                            chunk_index=chunk_index,
-                            collection_id=None,
-                            source=source,
-                            similarity=similarity,
-                            meta=meta if meta else {},
-                        )
-                    )
-                results_by_query.append(out)
+    for q in reformulations:
+        results_by_query.append(
+            retriever.retrieve(
+                query=q,
+                collection_id=collection_id or "default",
+                k=per_query_k,
+            )
+        )
 
     if not use_reranking:
         return results_by_query[0] if results_by_query else []
@@ -151,7 +93,9 @@ def get_reformulations(query: str, *, use_reranking: bool) -> List[str]:
     return _simple_reformulations(query) if use_reranking else [query]
 
 
-def _rrf_fuse(results: Iterable[List[RetrievedChunk]], *, rrf_k: int = 60) -> List[RetrievedChunk]:
+def _rrf_fuse(
+    results: Iterable[List[RetrievedChunk]], *, rrf_k: int = 60
+) -> List[RetrievedChunk]:
     scores: Dict[str, float] = {}
     chunks: Dict[str, RetrievedChunk] = {}
 

@@ -1,18 +1,20 @@
-import asyncio
 import json
+import logging
 import os
-import re
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from typing import Literal
 
 from app.providers.factory import get_llm_provider
 from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
-from app.rag.retriever import build_context, retrieve_top_k, to_citations, get_reformulations
+from app.rag.retriever import build_context, retrieve_chunks, to_citations, get_reformulations
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -21,50 +23,21 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _v0_answer(query: str, context: str) -> str:
-    """
-    v0 synthesizer: no LLM yet.
-    Gives you a deterministic response to validate the RAG pipeline
-    Replace this later with a real LLM stream.
-    """
-    if not context.strip():
-        return f"I couldn't find any relevant information for your query: '{query}'."
-
-    return (
-        "Here are the most relevant snippets I found in your documents.\n\n"
-        "----\n"
-        f"Question: {query}\n"
-        "----\n\n"
-        f"{context}\n\n"
-        "----\n"
-        "Next step: replace this synthesizer with a real LLM-based one!"
-    )
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
 
 
-async def _stream_text_as_tokens(
-    text: str, delay: float = 0.005
-) -> AsyncGenerator[str, None]:
-    """
-    Simple token streamer: streams whitespace-aware chunks (works well for validating UI).
-    Switch to word or real LLM deltas later.
-    """
-    for token in re.findall(r"\S+|\s+", text):
-        yield token
-        if delay:
-            await asyncio.sleep(delay)
-
-
-def _parse_payload(payload: dict) -> dict[str, Any]:
-    return {
-        "collection_id": payload.get("collection_id") or "default",
-        "messages": payload.get("messages") or [],
-        "k": int(payload.get("k") or 5),
-        "embedder_provider": payload.get("embedder_provider") or "hash",
-        "use_reranking": bool(payload.get("use_reranking", False)),
-        "llm_provider": payload.get("llm_provider"),
-        "llm_model": payload.get("llm_model"),
-        "llm_base_url": payload.get("llm_base_url"),
-    }
+class ChatRequest(BaseModel):
+    collection_id: str = "default"
+    messages: List[ChatMessage] = Field(default_factory=list)
+    k: int = Field(default=5, ge=1, le=50)
+    embedder_provider: str = "hash"
+    retriever_provider: Optional[str] = None
+    use_reranking: bool = False
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    llm_base_url: Optional[str] = None
 
 
 def _build_llm_provider(provider: str | None, model: str | None, base_url: str | None):
@@ -89,6 +62,29 @@ def _build_llm_provider(provider: str | None, model: str | None, base_url: str |
     )
 
 
+def _select_llm(params: ChatRequest) -> Any:
+    if params.llm_provider or params.llm_model or params.llm_base_url:
+        return _build_llm_provider(
+            params.llm_provider, params.llm_model, params.llm_base_url
+        )
+    return get_llm_provider()
+
+
+def _extract_query(llm: Any, params: ChatRequest) -> str:
+    return llm.latest_user_text([m.model_dump() for m in params.messages])
+
+
+def _retrieve_chunks(params: ChatRequest, query: str):
+    return retrieve_chunks(
+        query=query,
+        collection_id=params.collection_id,
+        k=params.k,
+        embedder_provider=params.embedder_provider,
+        retriever_provider=params.retriever_provider,
+        use_reranking=params.use_reranking,
+    )
+
+
 async def _stream_llm_answer(
     *, llm, query: str, context: str
 ) -> AsyncGenerator[str, None]:
@@ -101,36 +97,31 @@ async def _stream_llm_answer(
 
 async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
     try:
-        params = _parse_payload(payload)
-        if params["llm_provider"] or params["llm_model"] or params["llm_base_url"]:
-            llm = _build_llm_provider(
-                params["llm_provider"], params["llm_model"], params["llm_base_url"]
-            )
-        else:
-            llm = get_llm_provider()
-        query = llm.latest_user_text(params["messages"])
+        params = ChatRequest.model_validate(payload)
+        llm = _select_llm(params)
+        query = _extract_query(llm, params)
 
         if not query:
             yield sse("error", {"message": "No user query found in messages"})
             yield sse("done", {})
             return
 
-        print(params)
+        logger.debug("chat_params", extra={"params": params.model_dump()})
 
-        reformulations = get_reformulations(
-            query, use_reranking=params["use_reranking"]
-        )
-        if params["use_reranking"]:
+        if params.use_reranking:
+            reformulations = get_reformulations(
+                query, use_reranking=params.use_reranking
+            )
             yield sse("reformulations", {"items": reformulations})
 
-        chunks = retrieve_top_k(
-            query=query,
-            collection_id=params["collection_id"],
-            k=params["k"],
-            embedder_provider=params["embedder_provider"],
-            use_reranking=params["use_reranking"],
+        chunks = _retrieve_chunks(params, query)
+        logger.info(
+            "retrieval_count",
+            extra={
+                "count": len(chunks),
+                "collection_id": params.collection_id,
+            },
         )
-        print(f"retrieval_count={len(chunks)} collection_id={params['collection_id']}")
         context = build_context(chunks, max_chars=4000)
         citations = to_citations(chunks)
 

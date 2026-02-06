@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -9,6 +10,14 @@ from .api.upload import router as upload_router
 from .api.documents import router as document_router
 from .api.chunks import router as chunks_router
 from .providers.factory import get_embeddings_provider, get_llm_provider
+
+logger = logging.getLogger(__name__)
+
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 
 @asynccontextmanager
@@ -22,9 +31,9 @@ async def lifespan(app: FastAPI):
                 f"Embeddings provider dimension {provider.dim} does not match expected {expected}"
             )
         get_llm_provider()
-    except Exception as e:
-        print(f"Error initializing providers: {e}")
-        raise e
+    except Exception:
+        logger.exception("Error initializing providers")
+        raise
     yield
     # Shutdown: Any cleanup if necessary
 
