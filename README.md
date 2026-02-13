@@ -129,6 +129,11 @@ event: done
 data: {"ok":true}
 ```
 
+### Upload contract
+Upload API and UI request/response contract is defined in:
+
+- `docs/INGEST_UPLOAD_CONTRACT.md`
+
 ### Troubleshooting
 - If embeddings fail, ensure your DB vector dimension matches the embeddings model
   (the default schema uses `vector(384)` in `infra/schema.sql`).

@@ -11,8 +11,19 @@ export default function UploadPage() {
 
   const [collectionId, setCollectionId] = useState('default');
   const [embedderProvider, setEmbedderProvider] = useState<"hash" | "sentence-transformers">('hash');
+  const [chunkChars, setChunkChars] = useState(2000);
+  const [overlapChars, setOverlapChars] = useState(200);
   const [docs, setDocs] = useState<DocumentListResponse>({ items: [] });
   const [docsErr, setDocsErr] = useState<Error | null>(null);
+
+  const chunkConfigError =
+    chunkChars <= 0
+      ? "Chunk size must be greater than 0."
+      : overlapChars < 0
+        ? "Overlap must be 0 or greater."
+        : overlapChars >= chunkChars
+          ? "Overlap must be less than chunk size."
+          : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +51,8 @@ export default function UploadPage() {
       const r = await uploadFile({
         file: file,
         collectionId: collectionId,
+        chunkChars: chunkChars,
+        overlapChars: overlapChars,
         embedderProvider: embedderProvider,
       });
       console.log("Upload result:", r);
@@ -79,20 +92,65 @@ export default function UploadPage() {
       </div>
 
       <div style={{ marginTop: 12 }}>
+        <label>Chunk Size (characters)</label>
+        <input
+          name="chunkChars"
+          type="number"
+          min={1}
+          step={100}
+          value={chunkChars}
+          onChange={e => setChunkChars(Number(e.target.value))}
+          style={{ display: "block", width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        />
+        <small style={{ color: "#666" }}>
+          Larger chunks preserve more context, but can reduce retrieval precision.
+        </small>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <label>Chunk Overlap (characters)</label>
+        <input
+          name="overlapChars"
+          type="number"
+          min={0}
+          step={50}
+          value={overlapChars}
+          onChange={e => setOverlapChars(Number(e.target.value))}
+          style={{ display: "block", width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        />
+        <small style={{ color: "#666" }}>
+          Overlap helps continuity across chunk boundaries, but increases redundancy.
+        </small>
+      </div>
+
+      {chunkConfigError && (
+        <div style={{
+          marginTop: 12,
+          padding: 12,
+          background: "#fff4e5",
+          borderRadius: 8,
+          border: "1px solid #ffcc80",
+          color: "#8a4b00"
+        }}>
+          <strong>Chunk config error:</strong> {chunkConfigError}
+        </div>
+      )}
+
+      <div style={{ marginTop: 12 }}>
         <input name="file"
           type="file" onChange={e => setFile(e.target.files ? e.target.files[0] : null)} style={{}} />
         <button
           onClick={onUpload}
-          disabled={!file || uploading}
+          disabled={!file || uploading || !!chunkConfigError}
           style={{
             marginLeft: 12,
             padding: "8px 16px",
             borderRadius: 8,
             border: "1px solid #0070f3",
-            background: (!file || uploading) ? "#ccc" : "#0070f3",
+            background: (!file || uploading || !!chunkConfigError) ? "#ccc" : "#0070f3",
             color: "#fff",
-            cursor: (!file || uploading) ? "not-allowed" : "pointer",
-            opacity: (!file || uploading) ? 0.6 : 1
+            cursor: (!file || uploading || !!chunkConfigError) ? "not-allowed" : "pointer",
+            opacity: (!file || uploading || !!chunkConfigError) ? 0.6 : 1
           }}>
           {uploading ? 'Uploading...' : 'Upload'}
         </button>
