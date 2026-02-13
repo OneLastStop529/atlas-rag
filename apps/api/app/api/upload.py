@@ -1,8 +1,10 @@
 import os
 import uuid
+from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from pypdf import PdfReader
 from app.ingest.chunker import ChunkConfig, chunk_text
 from app.ingest.embeddings import Embedder
 from app.ingest.store import insert_document_and_chunks
@@ -13,6 +15,7 @@ router = APIRouter()
 
 SUPPORTED_MIME_TYPES = {
     "text/plain": "txt",
+    "application/pdf": "pdf",
 }
 
 
@@ -22,6 +25,14 @@ async def extract_text_from_file(file: UploadFile) -> str:
 
     if file.content_type == "text/plain":
         return content.decode("utf-8")
+    if file.content_type == "application/pdf":
+        reader = PdfReader(BytesIO(content))
+        parts = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            if text:
+                parts.append(text)
+        return "\n\n".join(parts)
     else:
         # For unsupported types, try to decode as text
         try:
