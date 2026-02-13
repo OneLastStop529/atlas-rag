@@ -11,6 +11,8 @@
 - Document env vars for LLM provider selection in one place.
  - Defer Prometheus-style metrics to a later milestone (use lightweight logs for now).
 
+Status: ✅ Completed
+
 Deliverables
 - Short README section describing LLM provider config and expected env vars.
 - Minimal test plan: curl chat, see streamed tokens + citations + done.
@@ -26,6 +28,8 @@ Acceptance
 - Citations still emitted after generation.
 - Errors propagate via SSE `error` event.
 
+Status: ✅ Completed
+
 ### 1.2: LLM prompt + system message
 - Add a configurable prompt template for RAG answers.
 - Include guidance: answer from context only; cite sources if possible.
@@ -33,12 +37,16 @@ Acceptance
 Acceptance
 - Prompt can be adjusted by env var (e.g., `LLM_SYSTEM_PROMPT`).
 
+Status: ✅ Completed
+
 ### 1.3: LLM provider selection (runtime)
 - Support switching LLM provider via env (`LLM_PROVIDER=hf_local|tgi`).
 - Validate provider initialization at startup (similar to embeddings check).
 
 Acceptance
 - API fails fast if provider misconfigured.
+
+Status: ✅ Completed
 
 ## Milestone 2 — LLM UX parity (UI/UX)
 ### 2.1: LLM settings panel
@@ -50,6 +58,8 @@ Acceptance
 Acceptance
 - Users can verify LLM availability from the UI.
 
+Status: ✅ Completed
+
 ### 2.2: Chat controls parity
 - Add top-k control and advanced retrieval toggle.
 - If advanced retrieval is not implemented yet, disable the toggle with tooltip.
@@ -57,11 +67,15 @@ Acceptance
 Acceptance
 - Chat page mirrors rag_demo’s main controls layout.
 
+Status: ✅ Completed
+
 ### 2.3: Q&A history
 - Persist and display recent Q&A (client-side for now).
 
 Acceptance
 - Last 5 questions visible with expandable answers.
+
+Status: ✅ Completed
 
 ## Milestone 3 — Retrieval enhancements (UI + backend follow-on)
 ### 3.1: Query reformulation + RRF (backend)
@@ -71,11 +85,15 @@ Acceptance
 Acceptance
 - When enabled, results are reranked; when disabled, behavior matches current.
 
+Status: ✅ Completed
+
 ### 3.2: Surface reformulations in UI
 - Display generated reformulations under the answer.
 
 Acceptance
 - Visible to user when reranking is enabled.
+
+Status: ✅ Completed
 
 ## Milestone 4 — Ingestion UX parity (secondary)
 - Add PDF support to upload.
@@ -84,6 +102,11 @@ Acceptance
 
 Acceptance
 - PDF upload works end-to-end; chunk config changes applied on ingest.
+
+Status: ⏳ In progress
+Notes:
+- Backend PDF upload support is complete.
+- UI chunk config + embedder validation pending.
 
 ## Open Questions
 - Should we prioritize local HF model loading or external TGI first?
