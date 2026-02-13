@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { uploadFile, UploadResponse, getDocuments, Document, DocumentListResponse } from "@/lib/api";
+import { UploadFieldErrors, UploadRequestError } from "@/lib/upload";
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -15,6 +16,7 @@ export default function UploadPage() {
   const [overlapChars, setOverlapChars] = useState(200);
   const [docs, setDocs] = useState<DocumentListResponse>({ items: [] });
   const [docsErr, setDocsErr] = useState<Error | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<UploadFieldErrors>({});
 
   const chunkConfigError =
     chunkChars <= 0
@@ -47,6 +49,8 @@ export default function UploadPage() {
     if (!file) return;
     setUploading(true);
     setResult(null);
+    setFieldErrors({});
+    setError(null);
     try {
       const r = await uploadFile({
         file: file,
@@ -57,10 +61,14 @@ export default function UploadPage() {
       });
       console.log("Upload result:", r);
       setResult(r);
-      setError(null);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Upload failed';
-      setError(errorMessage);
+      if (err instanceof UploadRequestError) {
+        setFieldErrors(err.fields);
+        setError(err.message);
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+        setError(errorMessage);
+      }
     } finally {
       setUploading(false);
     }
@@ -83,12 +91,25 @@ export default function UploadPage() {
         <select
           name="embedderProvider"
           value={embedderProvider}
-          onChange={e => setEmbedderProvider(e.target.value as "hash" | "sentence-transformers")}
+          onChange={e => {
+            setEmbedderProvider(e.target.value as "hash" | "sentence-transformers");
+            setFieldErrors(prev => {
+              const next = { ...prev };
+              delete next.embeddings;
+              delete next.embedderProvider;
+              return next;
+            });
+          }}
           style={{ display: "block", width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
         >
           <option value="hash">Hash</option>
           <option value="sentence-transformers">Sentence Transformers</option>
         </select>
+        {(fieldErrors.embeddings || fieldErrors.embedderProvider) && (
+          <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>
+            {fieldErrors.embeddings || fieldErrors.embedderProvider}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 12 }}>
@@ -99,12 +120,25 @@ export default function UploadPage() {
           min={1}
           step={100}
           value={chunkChars}
-          onChange={e => setChunkChars(Number(e.target.value))}
+          onChange={e => {
+            setChunkChars(Number(e.target.value));
+            setFieldErrors(prev => {
+              const next = { ...prev };
+              delete next.chunk_chars;
+              delete next.chunkChars;
+              return next;
+            });
+          }}
           style={{ display: "block", width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
         />
         <small style={{ color: "#666" }}>
           Larger chunks preserve more context, but can reduce retrieval precision.
         </small>
+        {(fieldErrors.chunk_chars || fieldErrors.chunkChars) && (
+          <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>
+            {fieldErrors.chunk_chars || fieldErrors.chunkChars}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 12 }}>
@@ -115,12 +149,25 @@ export default function UploadPage() {
           min={0}
           step={50}
           value={overlapChars}
-          onChange={e => setOverlapChars(Number(e.target.value))}
+          onChange={e => {
+            setOverlapChars(Number(e.target.value));
+            setFieldErrors(prev => {
+              const next = { ...prev };
+              delete next.overlap_chars;
+              delete next.overlapChars;
+              return next;
+            });
+          }}
           style={{ display: "block", width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
         />
         <small style={{ color: "#666" }}>
           Overlap helps continuity across chunk boundaries, but increases redundancy.
         </small>
+        {(fieldErrors.overlap_chars || fieldErrors.overlapChars) && (
+          <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>
+            {fieldErrors.overlap_chars || fieldErrors.overlapChars}
+          </div>
+        )}
       </div>
 
       {chunkConfigError && (
@@ -138,7 +185,14 @@ export default function UploadPage() {
 
       <div style={{ marginTop: 12 }}>
         <input name="file"
-          type="file" onChange={e => setFile(e.target.files ? e.target.files[0] : null)} style={{}} />
+          type="file" onChange={e => {
+            setFile(e.target.files ? e.target.files[0] : null);
+            setFieldErrors(prev => {
+              const next = { ...prev };
+              delete next.file;
+              return next;
+            });
+          }} style={{}} />
         <button
           onClick={onUpload}
           disabled={!file || uploading || !!chunkConfigError}
@@ -154,6 +208,11 @@ export default function UploadPage() {
           }}>
           {uploading ? 'Uploading...' : 'Upload'}
         </button>
+        {fieldErrors.file && (
+          <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>
+            {fieldErrors.file}
+          </div>
+        )}
       </div>
 
       {error && (

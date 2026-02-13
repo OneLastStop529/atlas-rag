@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi.responses import JSONResponse
 from pypdf import PdfReader
 from app.ingest.chunker import ChunkConfig, chunk_text
 from app.ingest.embeddings import Embedder
@@ -17,6 +18,20 @@ SUPPORTED_MIME_TYPES = {
     "text/plain": "txt",
     "application/pdf": "pdf",
 }
+
+
+def validation_error(message: str, fields: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "ok": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": message,
+                "fields": fields or {},
+            },
+        },
+    )
 
 
 async def extract_text_from_file(file: UploadFile) -> str:
@@ -56,35 +71,64 @@ async def upload_document(
 
     # Validate file type
     if file.content_type not in SUPPORTED_MIME_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {file.content_type}. Supported types: {list(SUPPORTED_MIME_TYPES.keys())}",
+        return validation_error(
+            "Unsupported file type.",
+            {
+                "file": (
+                    f"Unsupported file type: {file.content_type}. "
+                    f"Supported types: {list(SUPPORTED_MIME_TYPES.keys())}"
+                )
+            },
         )
 
     # Validate embeddings provider
     if embeddings not in ["sentence-transformers", "hash"]:
-        raise HTTPException(
-            status_code=400,
-            detail="embeddings must be either 'sentence-transformers' or 'hash'",
+        return validation_error(
+            "Invalid embeddings provider.",
+            {"embeddings": "embeddings must be either 'sentence-transformers' or 'hash'"},
         )
 
     # Validate filename
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
+        return validation_error("Filename is required.", {"file": "Filename is required"})
+
+    if chunk_chars <= 0:
+        return validation_error(
+            "Invalid chunking configuration.",
+            {"chunk_chars": "chunk_chars must be greater than 0"},
+        )
+
+    if overlap_chars < 0:
+        return validation_error(
+            "Invalid chunking configuration.",
+            {"overlap_chars": "overlap_chars must be 0 or greater"},
+        )
+
+    if overlap_chars >= chunk_chars:
+        return validation_error(
+            "Invalid chunking configuration.",
+            {"overlap_chars": "overlap_chars must be less than chunk_chars"},
+        )
 
     try:
         # Extract text from file
         text = await extract_text_from_file(file)
 
         if not text.strip():
-            raise HTTPException(status_code=400, detail="No text content found in file")
+            return validation_error(
+                "No text content found in file.",
+                {"file": "No text content found in file"},
+            )
 
         # Configure chunking
         cfg = ChunkConfig(chunk_chars=chunk_chars, overlap_chars=overlap_chars)
         chunks = chunk_text(text, cfg)
 
         if not chunks:
-            raise HTTPException(status_code=400, detail="No content chunks generated")
+            return validation_error(
+                "No content chunks generated.",
+                {"file": "No content chunks generated"},
+            )
 
         # Get database vector dimension
         with get_conn() as conn:
@@ -118,7 +162,10 @@ async def upload_document(
             "embeddings_provider": embeddings,
         }
 
-    except HTTPException:
+    except HTTPException as e:
+        if e.status_code == 400:
+            detail = str(e.detail)
+            return validation_error(detail, {"file": detail})
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

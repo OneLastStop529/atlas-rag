@@ -1,4 +1,25 @@
-import { API_BASE_URL, apiRequest, UploadArgs, UploadResponse } from "./api";
+import { API_BASE_URL, UploadArgs, UploadResponse } from "./api";
+
+export type UploadFieldErrors = Record<string, string>;
+
+interface UploadErrorEnvelope {
+  ok?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    fields?: UploadFieldErrors;
+  };
+}
+
+export class UploadRequestError extends Error {
+  fields: UploadFieldErrors;
+
+  constructor(message: string, fields: UploadFieldErrors = {}) {
+    super(message);
+    this.name = "UploadRequestError";
+    this.fields = fields;
+  }
+}
 
 export async function uploadFile(args: UploadArgs): Promise<UploadResponse> {
   const fd = new FormData();
@@ -16,8 +37,19 @@ export async function uploadFile(args: UploadArgs): Promise<UploadResponse> {
   });
 
   if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as UploadErrorEnvelope;
+      const message =
+        payload?.error?.message || `Upload failed with status ${response.status}`;
+      const fields = payload?.error?.fields || {};
+      throw new UploadRequestError(message, fields);
+    }
+
     const errorText = await response.text();
-    throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+    throw new UploadRequestError(
+      `Upload failed: ${response.status} - ${errorText}`,
+    );
   }
 
   return response.json();
