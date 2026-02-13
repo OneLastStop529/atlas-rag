@@ -7,15 +7,35 @@ This script simulates the upload endpoint logic to verify it works correctly.
 import os
 import sys
 from sys import argv
+from pathlib import Path
 
-# Add the app directory to Python path for imports
-sys.path.insert(0, "/Users/yizehu/Workspaces/atlas-rag/apps/api")
+ROOT = Path(__file__).resolve().parents[3]
+API_DIR = ROOT / "apps" / "api"
+sys.path.insert(0, str(API_DIR))
 
-file = (
-    argv[1]
-    if len(argv) > 1
-    else "/Users/yizehu/Workspaces/atlas-rag/apps/api/data/test_document.txt"
-)
+file = argv[1] if len(argv) > 1 else str(API_DIR / "data" / "test_document.txt")
+
+
+def _read_text_file(path: str) -> str:
+    with open(path, "r") as f:
+        return f.read()
+
+
+def _read_pdf_file(path: str) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as e:
+        print(f"Import error (expected if dependencies not installed): {e}")
+        return ""
+
+    with open(path, "rb") as f:
+        reader = PdfReader(f)
+        parts = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            if text:
+                parts.append(text)
+        return "\n\n".join(parts)
 
 
 def test_chunking():
@@ -23,9 +43,10 @@ def test_chunking():
     try:
         from app.ingest.chunker import ChunkConfig, chunk_text
 
-        # Read our test document
-        with open(file, "r") as f:
-            text = f.read()
+        if file.lower().endswith(".pdf"):
+            text = _read_pdf_file(file)
+        else:
+            text = _read_text_file(file)
 
         print(f"Document length: {len(text)} characters")
 
@@ -91,7 +112,7 @@ def validate_upload_logic():
     print("3. Validating upload endpoint structure...")
     try:
         # Check if upload file exists and has the right structure
-        upload_file = "/Users/yizehu/Workspaces/atlas-rag/apps/api/app/api/upload.py"
+        upload_file = str(API_DIR / "app" / "api" / "upload.py")
         if os.path.exists(upload_file):
             with open(upload_file, "r") as f:
                 content = f.read()
@@ -106,6 +127,8 @@ def validate_upload_logic():
                 "Form",
                 "File",
             ]
+            if file.lower().endswith(".pdf"):
+                required_components.append("application/pdf")
 
             missing = []
             for component in required_components:
@@ -144,7 +167,7 @@ def validate_upload_logic():
     print("🎉 All core upload functionality is properly implemented!")
     print("\nTo test with a running server:")
     print("1. Start the backend API server")
-    print("2. Use curl or frontend to upload test_document.txt")
+    print("2. Use curl or frontend to upload test_document.txt or a PDF")
     print("3. Verify document is stored and retrievable via chat")
 
     return True
