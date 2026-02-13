@@ -1,0 +1,17 @@
+# Python envs and caches
+.venv/
+**/__pycache__/
+*.pyc
+
+# JS dependencies and build artifacts
+node_modules/
+.next/
+dist/
+out/
+
+# Logs and temp files
+*.log
+tmp/
+
+# VCS metadata
+.git/
