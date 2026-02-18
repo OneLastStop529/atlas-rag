@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react";
 import { uploadFile, UploadResponse, getDocuments, Document, DocumentListResponse } from "@/lib/api";
 import { UploadFieldErrors, UploadRequestError } from "@/lib/upload";
+import {
+  EMBEDDINGS_PROVIDER_OPTIONS,
+  EmbeddingsProviderId,
+} from "@/lib/embeddings";
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -11,9 +15,10 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [collectionId, setCollectionId] = useState('default');
-  const [embedderProvider, setEmbedderProvider] = useState<"hash" | "sentence-transformers">('hash');
-  const [chunkChars, setChunkChars] = useState(2000);
-  const [overlapChars, setOverlapChars] = useState(200);
+  const [embedderProvider, setEmbedderProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
+  const [chunkChars, setChunkChars] = useState(700);
+
+  const [overlapChars, setOverlapChars] = useState(Math.ceil(chunkChars * 0.14)); // default to 14% of chunk size, which is a common heuristic for good overlap
   const [docs, setDocs] = useState<DocumentListResponse>({ items: [] });
   const [docsErr, setDocsErr] = useState<Error | null>(null);
   const [fieldErrors, setFieldErrors] = useState<UploadFieldErrors>({});
@@ -92,7 +97,7 @@ export default function UploadPage() {
           name="embedderProvider"
           value={embedderProvider}
           onChange={e => {
-            setEmbedderProvider(e.target.value as "hash" | "sentence-transformers");
+            setEmbedderProvider(e.target.value as EmbeddingsProviderId);
             setFieldErrors(prev => {
               const next = { ...prev };
               delete next.embeddings;
@@ -102,8 +107,11 @@ export default function UploadPage() {
           }}
           style={{ display: "block", width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
         >
-          <option value="hash">Hash</option>
-          <option value="sentence-transformers">Sentence Transformers</option>
+          {EMBEDDINGS_PROVIDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
         {(fieldErrors.embeddings || fieldErrors.embedderProvider) && (
           <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>

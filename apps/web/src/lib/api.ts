@@ -60,7 +60,7 @@ export interface UploadArgs {
   collectionId?: string;
   chunkChars?: number;
   overlapChars?: number;
-  embedderProvider?: "hash" | "sentence-transformers";
+  embedderProvider?: EmbeddingsProviderId;
 }
 
 // Generic API request function
@@ -169,3 +169,4 @@ export type { UploadArgs, UploadResponse } from './upload';
 export async function healthCheck(): Promise<{ status: string }> {
   return apiRequest<{ status: string }>('/health');
 }
+import type { EmbeddingsProviderId } from "./embeddings";

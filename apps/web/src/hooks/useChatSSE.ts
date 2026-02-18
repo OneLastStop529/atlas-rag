@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { SseEvent, streamChat } from "@/lib/sse";
+import type { EmbeddingsProviderId } from "@/lib/embeddings";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type Citation = {
@@ -19,7 +20,7 @@ export interface UseChatSSEOptions {
   apiUrl: string;
   collectionId?: string;
   k?: number;
-  embedderProvider?: string;
+  embedderProvider?: EmbeddingsProviderId;
   useReranking?: boolean;
   llmProvider?: string;
   llmModel?: string;

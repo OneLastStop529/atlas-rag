@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { streamChat } from "@/lib/sse";
 import { useChatSSE } from "@/hooks/useChatSSE";
 import { getChunk, Chunk } from "@/lib/api";
+import {
+  EMBEDDINGS_PROVIDER_OPTIONS,
+  EmbeddingsProviderId,
+} from "@/lib/embeddings";
 
 
 export default function Page() {
@@ -17,6 +21,7 @@ export default function Page() {
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [topK, setTopK] = useState(5);
   const [advancedRetrieval, setAdvancedRetrieval] = useState(false);
+  const [embedderProvider, setEmbedderProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ id: string; question: string; answer: string; expanded: boolean }>>([]);
@@ -41,7 +46,7 @@ export default function Page() {
     apiUrl,
     collectionId: "default",
     k: topK,
-    embedderProvider: "hash",
+    embedderProvider: embedderProvider,
     useReranking: advancedRetrieval,
     llmProvider,
     llmModel: llmModel || undefined,
@@ -56,11 +61,13 @@ export default function Page() {
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
     const storedTopK = window.localStorage.getItem("rag.topK");
+    const storedEmbedderProvider = window.localStorage.getItem("rag.embedderProvider");
     const storedHistory = window.localStorage.getItem("rag.history");
     if (storedProvider) setLlmProvider(storedProvider);
     if (storedModel) setLlmModel(storedModel);
     if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
     if (storedTopK) setTopK(Number(storedTopK) || 5);
+    if (storedEmbedderProvider) setEmbedderProvider(storedEmbedderProvider as EmbeddingsProviderId);
     if (storedHistory) {
       try {
         const parsed = JSON.parse(storedHistory);
@@ -77,7 +84,8 @@ export default function Page() {
     window.localStorage.setItem("llm.model", llmModel);
     window.localStorage.setItem("llm.baseUrl", llmBaseUrl);
     window.localStorage.setItem("rag.topK", String(topK));
-  }, [llmProvider, llmModel, llmBaseUrl, topK]);
+    window.localStorage.setItem("rag.embedderProvider", embedderProvider);
+  }, [llmProvider, llmModel, llmBaseUrl, topK, embedderProvider]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -203,6 +211,20 @@ export default function Page() {
               onChange={(e) => setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
               style={{ width: 120, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
             />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Embedder</span>
+            <select
+              value={embedderProvider}
+              onChange={(e) => setEmbedderProvider(e.target.value as EmbeddingsProviderId)}
+              style={{ minWidth: 220, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            >
+              {EMBEDDINGS_PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8 }} title="Advanced retrieval not available yet">
             <input
