@@ -1,4 +1,4 @@
-from app.rag.retriever import retrieve_top_k, to_citations
+from app.rag.retriever import retrieve_chunks, to_citations
 
 
 def main():
@@ -6,7 +6,12 @@ def main():
     collection_id = "default"
     k = 3
 
-    chunks = retrieve_top_k(query, k, collection_id, embedder_provider="hash")
+    chunks = retrieve_chunks(
+        query=query,
+        k=k,
+        collection_id=collection_id,
+        embedder_provider="hash",
+    )
     citations = to_citations(chunks)
 
     print(f"Query: {query}")

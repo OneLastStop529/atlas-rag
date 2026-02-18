@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import List
 
 from app.db import get_conn
-from app.ingest.embeddings import Embedder
 from app.ingest.pgvector_dim import get_db_vector_dim
+from app.providers.embeddings.base import EmbeddingsProvider
 
 from .types import RetrievedChunk
 
@@ -15,15 +15,17 @@ class TopKRetriever:
     def __init__(self, *, embedder_provider: str = "hash") -> None:
         self.embedder_provider = embedder_provider
 
-    def retrieve(self, *, query: str, collection_id: str, k: int) -> List[RetrievedChunk]:
+    def retrieve(
+        self, *, query: str, collection_id: str, k: int
+    ) -> List[RetrievedChunk]:
         if not query:
             return []
 
         with get_conn() as conn:
             with conn.cursor() as cur:
                 dim = get_db_vector_dim(cur)
-                embedder = Embedder(dim=dim, provider=self.embedder_provider)
-                qvec = embedder.embed_batch([query])[0]
+                embedder = EmbeddingsProvider(dim=dim, provider=self.embedder_provider)
+                qvec = embedder.embed_query(query)
                 cur.execute(
                     """
                     SELECT

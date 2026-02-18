@@ -1,8 +1,13 @@
 import os
 from functools import lru_cache
 
+
 from .embeddings.hf_local import HFLocalEmbeddings
 from .embeddings.tei import TEIEmbeddings
+from .embeddings.bge_large import BGELargeEmbeddings
+from .embeddings.bge_small import BGESmallEmbeddings
+from .embeddings.sentence_transformer import SentenceTransformerEmbeddings
+from .embeddings.hash import HashEmbeddings
 from .llm.openai_llm import OpenAILLM
 from .llm.ollama_local import OllamaLocal
 
@@ -15,13 +20,24 @@ def get_embeddings_provider():
             "HF_EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
         )
         return HFLocalEmbeddings(model_name)
-
+    elif embeddings_provider_type == "sentence-transformers":
+        model_name = os.getenv(
+            "HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+        )
+        return SentenceTransformerEmbeddings(model_name)
     elif embeddings_provider_type == "tei":
         base_url = os.getenv("TEI_BASE_URL", "http://localhost:8000")
         dim = int(os.getenv("TEI_EMBEDDING_DIM", "384"))
         name = os.getenv("TEI_EMBEDDING_NAME", "tei")
         return TEIEmbeddings(base_url=base_url, dim=dim, name=name)
+    elif embeddings_provider_type == "hash":
+        dim = int(os.getenv("HASH_EMBEDDING_DIM", "384"))
+        return HashEmbeddings(dim=dim)
 
+    elif embeddings_provider_type == "bge_large":
+        return BGELargeEmbeddings()
+    elif embeddings_provider_type == "bge_small":
+        return BGESmallEmbeddings()
     else:
         raise ValueError(f"Unknown embeddings provider: {embeddings_provider_type}")
 
@@ -32,7 +48,9 @@ def reset_embeddings_provider_cache():
 
 @lru_cache(maxsize=1)
 def get_llm_provider():
-    llm_provider_type = (os.getenv("LLM_PROVIDER", "ollama") or "ollama").strip().lower()
+    llm_provider_type = (
+        (os.getenv("LLM_PROVIDER", "ollama") or "ollama").strip().lower()
+    )
     if llm_provider_type == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

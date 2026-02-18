@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
             raise ValueError(
                 f"Embeddings provider dimension {provider.dim} does not match expected {expected}"
             )
-        get_llm_provider()
+        llm_provider = get_llm_provider()
     except Exception:
         logger.exception("Error initializing providers")
         raise

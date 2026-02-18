@@ -1,26 +1,35 @@
-import os
-import uuid
 from io import BytesIO
-from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
-from app.ingest.chunker import ChunkConfig, chunk_text
-from app.ingest.embeddings import Embedder
+from app.ingest.chunker import ChunkConfig, lc_recursive_ch_text
 from app.ingest.store import insert_document_and_chunks
 from app.ingest.pgvector_dim import get_db_vector_dim
 from app.db import get_conn
+from app.providers.embeddings.base import EmbeddingsProvider
 
 router = APIRouter()
 
 SUPPORTED_MIME_TYPES = {
     "text/plain": "txt",
     "application/pdf": "pdf",
+    "text/markdown": "md",
+}
+
+SUPPORTED_EMBEDDINGS_PROVIDERS = {
+    "sentence-transformers",
+    "hash",
+    "hf_local",
+    "tei",
+    "bge-small-zh",
+    "bge-large-zh",
 }
 
 
-def validation_error(message: str, fields: dict[str, str] | None = None) -> JSONResponse:
+def validation_error(
+    message: str, fields: dict[str, str] | None = None
+) -> JSONResponse:
     return JSONResponse(
         status_code=400,
         content={
@@ -38,9 +47,9 @@ async def extract_text_from_file(file: UploadFile) -> str:
     """Extract text from uploaded file based on MIME type."""
     content = await file.read()
 
-    if file.content_type == "text/plain":
+    if file.content_type == "text/plain" or file.content_type == "text/markdown":
         return content.decode("utf-8")
-    if file.content_type == "application/pdf":
+    elif file.content_type == "application/pdf":
         reader = PdfReader(BytesIO(content))
         parts = []
         for page in reader.pages:
@@ -63,9 +72,9 @@ async def extract_text_from_file(file: UploadFile) -> str:
 async def upload_document(
     file: UploadFile = File(...),
     collection: str = Form(default="default"),
-    chunk_chars: int = Form(default=2000),
-    overlap_chars: int = Form(default=200),
-    embeddings: str = Form(default="hash"),
+    chunk_chars: int = Form(default=700),
+    overlap_chars: int = Form(default=100),
+    embeddings: str = Form(default="sentence-transformers"),
 ):
     """Upload and ingest a document into the vector database."""
 
@@ -82,15 +91,22 @@ async def upload_document(
         )
 
     # Validate embeddings provider
-    if embeddings not in ["sentence-transformers", "hash"]:
+    if embeddings not in SUPPORTED_EMBEDDINGS_PROVIDERS:
         return validation_error(
             "Invalid embeddings provider.",
-            {"embeddings": "embeddings must be either 'sentence-transformers' or 'hash'"},
+            {
+                "embeddings": (
+                    "embeddings must be one of: "
+                    + ", ".join(sorted(SUPPORTED_EMBEDDINGS_PROVIDERS))
+                )
+            },
         )
 
     # Validate filename
     if not file.filename:
-        return validation_error("Filename is required.", {"file": "Filename is required"})
+        return validation_error(
+            "Filename is required.", {"file": "Filename is required"}
+        )
 
     if chunk_chars <= 0:
         return validation_error(
@@ -122,7 +138,7 @@ async def upload_document(
 
         # Configure chunking
         cfg = ChunkConfig(chunk_chars=chunk_chars, overlap_chars=overlap_chars)
-        chunks = chunk_text(text, cfg)
+        chunks = lc_recursive_ch_text(text, cfg)
 
         if not chunks:
             return validation_error(
@@ -136,8 +152,10 @@ async def upload_document(
                 dim = get_db_vector_dim(cur)
 
         # Generate embeddings
-        embedder = Embedder(dim=dim, provider=embeddings)
-        embeddings_list = embedder.embed_batch(chunks)
+
+        #
+        embedder_provider = EmbeddingsProvider(dim=dim, provider=embeddings)
+        embeddings_list = embedder_provider.embed_documents(chunks)
 
         # Store document and chunks
         doc_id, num_chunks = insert_document_and_chunks(

@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 import os
 from app.db import get_conn
-from app.ingest.chunker import ChunkConfig, chunk_text
-from app.ingest.embeddings import Embedder
+from app.ingest.chunker import ChunkConfig, lc_recursive_ch_text
 from app.ingest.store import insert_document_and_chunks
 from app.ingest.pgvector_dim import get_db_vector_dim
+from app.providers.embeddings.base import EmbeddingsProvider
 
 
 def main():
@@ -35,7 +35,7 @@ def main():
         text = f.read()
 
     cfg = ChunkConfig(chunk_chars=args.chunk_chars, overlap_chars=args.overlap_chars)
-    chunks = chunk_text(text, cfg)
+    chunks = lc_recursive_ch_text(text, cfg)
     if not chunks:
         raise SystemExit("No content found to ingest")
 
@@ -49,8 +49,10 @@ def main():
     )
     print(f"Embedding provider: {args.embeddings}")
 
-    embedder = Embedder(dim=dim, provider=args.embeddings)
-    embeddings = embedder.embed_batch(chunks)
+    embedder = EmbeddingsProvider(
+        dim=dim, provider=args.embeddings
+    )  # Validate provider choice
+    embeddings = embedder.embed_documents(chunks)
 
     doc_id, num_chunks = insert_document_and_chunks(
         collection_id=args.collection,

@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 API_DIR = ROOT / "apps" / "api"
 sys.path.insert(0, str(API_DIR))
+from app.providers.embeddings.base import EmbeddingsProvider
 
 file = argv[1] if len(argv) > 1 else str(API_DIR / "data" / "test_document.txt")
 
@@ -68,13 +69,13 @@ def test_chunking():
 def test_embeddings():
     """Test the embedding functionality."""
     try:
-        from app.ingest.embeddings import Embedder
-
         # Test with hash embeddings (doesn't require ML models)
-        embedder = Embedder(dim=384, provider="hash")
 
+        embedder = EmbeddingsProvider(
+            dim=384, provider="hash"
+        )  # Validate provider choice
         test_chunks = ["This is a test chunk", "Another test chunk"]
-        embeddings = embedder.embed_batch(test_chunks)
+        embeddings = embedder.embed_documents(test_chunks)
 
         print(
             f"Generated {len(embeddings)} embeddings of dimension {len(embeddings[0])}"
@@ -123,7 +124,7 @@ def validate_upload_logic():
                 "extract_text_from_file",
                 "insert_document_and_chunks",
                 "ChunkConfig",
-                "Embedder",
+                "EmbeddingsProvider",
                 "Form",
                 "File",
             ]

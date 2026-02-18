@@ -3,18 +3,32 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import List
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 @dataclass
 class ChunkConfig:
-    chunk_chars: int = 2000
-    overlap_chars: int = 200
+    chunk_chars: int = 700
+    overlap_chars: int = 100
+
+
+def lc_recursive_ch_text(text: str, cfg: ChunkConfig):
+    """
+    Uses langchain's RecursiveCharacterTextSplitter to split text into chunks.
+    This is more sophisticated than our simple chunking and can split on newlines, spaces, etc.
+    """
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=cfg.chunk_chars,
+        chunk_overlap=cfg.overlap_chars,
+        separators=["\n\n", "\n", " ", ""],
+    )
+    return splitter.split_text(text)
 
 
 def chunk_text(text: str, cfg: ChunkConfig) -> List[str]:
     """
     Simple, robust text chunking based on character count with overlap.
-    Good enough for v0 ingestion.
+    Good enough for v0 ingestion
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
