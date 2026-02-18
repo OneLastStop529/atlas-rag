@@ -103,10 +103,15 @@ Status: ✅ Completed
 Acceptance
 - PDF upload works end-to-end; chunk config changes applied on ingest.
 
-Status: ⏳ In progress
+Status: ✅ Completed
 Notes:
 - Backend PDF upload support is complete.
-- UI chunk config + embedder validation pending.
+- UI chunk config controls are implemented and wired to upload payload.
+- Upload embedder selection supports provider options and structured field-level validation errors.
+- Validation envelope regression tests added: `apps/api/tests/test_upload_validation.py` (3 tests, passing).
+- Smoke verification:
+  - `apps/api/scripts/test_upload.py` passes.
+  - `apps/api/scripts/retrieve_smoke.py` and `apps/api/scripts/pgvector_smoke.py` currently fail with DB connectivity (`psycopg2.OperationalError`) in this environment.
 
 ## Open Questions
 - Should we prioritize local HF model loading or external TGI first?
