@@ -15,14 +15,15 @@ This document is the single source of truth for the upload API and the upload UI
 - `collection` (optional, string, default: `"default"`)
 - `chunk_chars` (optional, integer, default: `2000`)
 - `overlap_chars` (optional, integer, default: `200`)
-- `embeddings` (optional, enum, default: `"hash"`)
-- Allowed `embeddings` values: `"hash"`, `"sentence-transformers"`
+- `embeddings_provider` (optional, enum, default: `"sentence-transformers"`)
+- `embeddings` (optional, legacy alias for backward compatibility)
+- Allowed provider values: `"sentence-transformers"`, `"hash"`, `"hf_local"`, `"tei"`, `"bge-small-zh"`, `"bge-large-zh"`
 
 ## Validation Rules
 
 - `file` must be present and have a filename.
 - `file` MIME type must be in supported list.
-- `embeddings` must be one of allowed enum values.
+- `embeddings_provider` must be one of allowed enum values.
 - `chunk_chars` must be a positive integer.
 - `overlap_chars` must be a non-negative integer.
 - `overlap_chars` must be `< chunk_chars`.
@@ -73,6 +74,6 @@ Observed behavior today:
 
 - API already accepts PDF and text uploads.
 - UI already sends `chunk_chars` and `overlap_chars`, but upload page does not expose controls for them yet.
-- API validates MIME type, filename, and `embeddings` enum.
+- API validates MIME type, filename, and `embeddings_provider` enum.
 - API does not yet enforce numeric bounds for `chunk_chars` and `overlap_chars`.
 - API currently returns FastAPI default error shape (`detail`) rather than field-level errors.

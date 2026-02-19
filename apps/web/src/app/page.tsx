@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { streamChat } from "@/lib/sse";
 import { useChatSSE } from "@/hooks/useChatSSE";
 import { getChunk, Chunk } from "@/lib/api";
 import {
@@ -21,7 +20,7 @@ export default function Page() {
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [topK, setTopK] = useState(5);
   const [advancedRetrieval, setAdvancedRetrieval] = useState(false);
-  const [embedderProvider, setEmbedderProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
+  const [embeddingsProvider, setEmbeddingsProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ id: string; question: string; answer: string; expanded: boolean }>>([]);
@@ -46,7 +45,7 @@ export default function Page() {
     apiUrl,
     collectionId: "default",
     k: topK,
-    embedderProvider: embedderProvider,
+    embeddingsProvider,
     useReranking: advancedRetrieval,
     llmProvider,
     llmModel: llmModel || undefined,
@@ -61,13 +60,17 @@ export default function Page() {
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
     const storedTopK = window.localStorage.getItem("rag.topK");
-    const storedEmbedderProvider = window.localStorage.getItem("rag.embedderProvider");
+    const storedEmbeddingsProvider =
+      window.localStorage.getItem("rag.embeddingsProvider") ||
+      window.localStorage.getItem("rag.embedderProvider");
     const storedHistory = window.localStorage.getItem("rag.history");
     if (storedProvider) setLlmProvider(storedProvider);
     if (storedModel) setLlmModel(storedModel);
     if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
     if (storedTopK) setTopK(Number(storedTopK) || 5);
-    if (storedEmbedderProvider) setEmbedderProvider(storedEmbedderProvider as EmbeddingsProviderId);
+    if (storedEmbeddingsProvider) {
+      setEmbeddingsProvider(storedEmbeddingsProvider as EmbeddingsProviderId);
+    }
     if (storedHistory) {
       try {
         const parsed = JSON.parse(storedHistory);
@@ -84,8 +87,8 @@ export default function Page() {
     window.localStorage.setItem("llm.model", llmModel);
     window.localStorage.setItem("llm.baseUrl", llmBaseUrl);
     window.localStorage.setItem("rag.topK", String(topK));
-    window.localStorage.setItem("rag.embedderProvider", embedderProvider);
-  }, [llmProvider, llmModel, llmBaseUrl, topK, embedderProvider]);
+    window.localStorage.setItem("rag.embeddingsProvider", embeddingsProvider);
+  }, [llmProvider, llmModel, llmBaseUrl, topK, embeddingsProvider]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -215,8 +218,8 @@ export default function Page() {
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 12, opacity: 0.7 }}>Embedder</span>
             <select
-              value={embedderProvider}
-              onChange={(e) => setEmbedderProvider(e.target.value as EmbeddingsProviderId)}
+              value={embeddingsProvider}
+              onChange={(e) => setEmbeddingsProvider(e.target.value as EmbeddingsProviderId)}
               style={{ minWidth: 220, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
             >
               {EMBEDDINGS_PROVIDER_OPTIONS.map((option) => (

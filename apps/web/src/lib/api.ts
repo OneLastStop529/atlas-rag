@@ -1,3 +1,5 @@
+import type { EmbeddingsProviderId } from "./embeddings";
+
 // Base API configuration
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -60,7 +62,7 @@ export interface UploadArgs {
   collectionId?: string;
   chunkChars?: number;
   overlapChars?: number;
-  embedderProvider?: EmbeddingsProviderId;
+  embeddingsProvider?: EmbeddingsProviderId;
 }
 
 // Generic API request function
@@ -169,4 +171,3 @@ export type { UploadArgs, UploadResponse } from './upload';
 export async function healthCheck(): Promise<{ status: string }> {
   return apiRequest<{ status: string }>('/health');
 }
-import type { EmbeddingsProviderId } from "./embeddings";

@@ -16,7 +16,9 @@ def retrieve(payload: dict):
         query=payload["query"],
         collection_id=payload.get("collection_id", "default"),
         k=payload.get("k", 5),
-        embedder_provider=payload.get("embedder_provider", "hash"),
+        embeddings_provider=payload.get(
+            "embeddings_provider", payload.get("embedder_provider", "hash")
+        ),
         retriever_provider=payload.get("retriever_provider"),
         use_reranking=payload.get("use_reranking", False),
     )
@@ -30,7 +32,7 @@ def retrieve_chunks(
     query: str,
     k: int,
     collection_id: Optional[str] = None,
-    embedder_provider: str = "hash",
+    embeddings_provider: str = "hash",
     retriever_provider: Optional[str] = None,
     use_reranking: bool = False,
     rrf_k: int = 60,
@@ -56,7 +58,9 @@ def retrieve_chunks(
     reformulations = _simple_reformulations(query) if use_reranking else [query]
     per_query_k = per_query_k or (max(k, 10) if use_reranking else k)
 
-    retriever = get_retriever(retriever_provider, embedder_provider=embedder_provider)
+    retriever = get_retriever(
+        retriever_provider, embeddings_provider=embeddings_provider
+    )
     results_by_query: List[List[RetrievedChunk]] = []
     for q in reformulations:
         results_by_query.append(

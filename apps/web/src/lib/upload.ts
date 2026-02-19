@@ -27,7 +27,7 @@ export async function uploadFile(args: UploadArgs): Promise<UploadResponse> {
   fd.append('collection', args.collectionId ?? 'default');
   fd.append('chunk_chars', String(args.chunkChars ?? 2000));
   fd.append('overlap_chars', String(args.overlapChars ?? 200));
-  fd.append('embeddings', args.embedderProvider ?? 'sentence-transformers');
+  fd.append('embeddings_provider', args.embeddingsProvider ?? 'sentence-transformers');
 
   const url = `${API_BASE_URL}/upload`;
   

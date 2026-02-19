@@ -13,6 +13,10 @@ from app.core.reliability import (
 )
 from app.db import get_conn
 from app.providers.embeddings.base import EmbeddingsProvider
+from app.providers.embeddings.registry import (
+    normalize_embeddings_provider_id,
+    supported_embeddings_provider_ids,
+)
 
 router = APIRouter()
 
@@ -22,14 +26,7 @@ SUPPORTED_MIME_TYPES = {
     "text/markdown": "md",
 }
 
-SUPPORTED_EMBEDDINGS_PROVIDERS = {
-    "sentence-transformers",
-    "hash",
-    "hf_local",
-    "tei",
-    "bge-small-zh",
-    "bge-large-zh",
-}
+SUPPORTED_EMBEDDINGS_PROVIDERS = set(supported_embeddings_provider_ids())
 
 
 def validation_error(
@@ -46,6 +43,10 @@ def validation_error(
             },
         },
     )
+
+
+def _coerce_optional_str(value) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 async def extract_text_from_file(file: UploadFile) -> str:
@@ -79,7 +80,8 @@ async def upload_document(
     collection: str = Form(default="default"),
     chunk_chars: int = Form(default=700),
     overlap_chars: int = Form(default=100),
-    embeddings: str = Form(default="sentence-transformers"),
+    embeddings_provider: str | None = Form(default=None),
+    embeddings: str | None = Form(default=None),
 ):
     """Upload and ingest a document into the vector database."""
 
@@ -95,13 +97,19 @@ async def upload_document(
             },
         )
 
+    resolved_embeddings_provider = normalize_embeddings_provider_id(
+        _coerce_optional_str(embeddings_provider)
+        or _coerce_optional_str(embeddings)
+        or "sentence-transformers"
+    )
+
     # Validate embeddings provider
-    if embeddings not in SUPPORTED_EMBEDDINGS_PROVIDERS:
+    if resolved_embeddings_provider not in SUPPORTED_EMBEDDINGS_PROVIDERS:
         return validation_error(
             "Invalid embeddings provider.",
             {
-                "embeddings": (
-                    "embeddings must be one of: "
+                "embeddings_provider": (
+                    "embeddings_provider must be one of: "
                     + ", ".join(sorted(SUPPORTED_EMBEDDINGS_PROVIDERS))
                 )
             },
@@ -164,8 +172,10 @@ async def upload_document(
         # Generate embeddings
 
         #
-        embedder_provider = EmbeddingsProvider(dim=dim, provider=embeddings)
-        embeddings_list = embedder_provider.embed_documents(chunks)
+        embeddings_impl = EmbeddingsProvider(
+            dim=dim, provider=resolved_embeddings_provider
+        )
+        embeddings_list = embeddings_impl.embed_documents(chunks)
 
         # Store document and chunks
         doc_id, num_chunks = retry_with_backoff(
@@ -190,7 +200,7 @@ async def upload_document(
                 "chunk_chars": chunk_chars,
                 "overlap_chars": overlap_chars,
             },
-            "embeddings_provider": embeddings,
+            "embeddings_provider": resolved_embeddings_provider,
         }
 
     except HTTPException as e:

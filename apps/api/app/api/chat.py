@@ -33,7 +33,8 @@ class ChatRequest(BaseModel):
     collection_id: str = "default"
     messages: List[ChatMessage] = Field(default_factory=list)
     k: int = Field(default=5, ge=1, le=50)
-    embedder_provider: str = "hash"
+    embeddings_provider: Optional[str] = None
+    embedder_provider: Optional[str] = None  # Backward-compatible alias
     retriever_provider: Optional[str] = None
     use_reranking: bool = False
     llm_provider: Optional[str] = None
@@ -76,11 +77,12 @@ def _extract_query(llm: Any, params: ChatRequest) -> str:
 
 
 def _retrieve_chunks(params: ChatRequest, query: str):
+    embeddings_provider = params.embeddings_provider or params.embedder_provider or "hash"
     return retrieve_chunks(
         query=query,
         collection_id=params.collection_id,
         k=params.k,
-        embedder_provider=params.embedder_provider,
+        embeddings_provider=embeddings_provider,
         retriever_provider=params.retriever_provider,
         use_reranking=params.use_reranking,
     )
@@ -154,7 +156,7 @@ async def chat(payload: dict):
             "collection_id": "default",
             "messages": [{"role": "user", "content": "..."}],
             "k": 5,
-            "embedder_provider": "hash" | "sentence-transformers",
+            "embeddings_provider": "hash" | "sentence-transformers",
         }
     """
     headers = {

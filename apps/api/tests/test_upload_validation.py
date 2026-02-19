@@ -40,7 +40,7 @@ class UploadValidationTests(unittest.TestCase):
         payload = parse_json_response(response)
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["code"], "VALIDATION_ERROR")
-        self.assertIn("embeddings", payload["error"]["fields"])
+        self.assertIn("embeddings_provider", payload["error"]["fields"])
 
     def test_invalid_chunk_bounds_returns_structured_validation_error(self):
         response = asyncio.run(

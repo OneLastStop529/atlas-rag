@@ -1,8 +1,11 @@
 from __future__ import annotations
-import os
 import time
 from typing import List
 from langchain.embeddings.base import Embeddings
+from app.providers.embeddings.registry import (
+    create_embeddings_provider,
+    normalize_embeddings_provider_id,
+)
 from app.core.reliability import (
     dependency_timeout_seconds,
     enforce_timeout_budget,
@@ -26,43 +29,8 @@ class EmbeddingsProvider(Embeddings):
         if type(self) is not EmbeddingsProvider:
             return
 
-        provider = provider.strip().lower()
-        if provider == "hash":
-            from .hash import HashEmbeddings
-
-            self._impl = HashEmbeddings(dim=dim or 384)
-        elif provider in {"sentence-transformers", "hf_local"}:
-            from .sentence_transformer import SentenceTransformerEmbeddings
-
-            model_name = os.getenv(
-                "HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-            )
-            self._impl = SentenceTransformerEmbeddings(model_name=model_name)
-        elif provider == "bge-large-zh":
-            from .bge_large import BGELargeEmbeddings
-
-            self._impl = BGELargeEmbeddings()
-        elif provider == "bge-small-zh":
-            from .bge_small import BGESmallEmbeddings
-
-            self._impl = BGESmallEmbeddings()
-        elif provider == "hf_local":
-            from .hf_local import HFLocalEmbeddings
-
-            model_name = os.getenv(
-                "HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-            )
-            self._impl = HFLocalEmbeddings(model_name=model_name)
-        elif provider == "tei":
-            from .tei import TEIEmbeddings
-
-            self._impl = TEIEmbeddings(
-                dim=dim or 384,
-                model_name="TEI",
-                base_url=os.getenv("TEI_BASE_URL", "http://localhost:8000"),
-            )
-        else:
-            raise ValueError(f"Unknown embedder provider: {provider}")
+        provider_id = normalize_embeddings_provider_id(provider)
+        self._impl = create_embeddings_provider(provider=provider_id, dim=dim)
 
         self.dim = self._impl.dim
         self.model_name = self._impl.model_name

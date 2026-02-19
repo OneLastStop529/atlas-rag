@@ -20,7 +20,7 @@ export interface UseChatSSEOptions {
   apiUrl: string;
   collectionId?: string;
   k?: number;
-  embedderProvider?: EmbeddingsProviderId;
+  embeddingsProvider?: EmbeddingsProviderId;
   useReranking?: boolean;
   llmProvider?: string;
   llmModel?: string;
@@ -44,7 +44,7 @@ export type StreamSSEEvent =
 export function useChatSSE({
   apiUrl,
   k,
-  embedderProvider,
+  embeddingsProvider,
   useReranking,
   llmProvider,
   llmModel,
@@ -86,7 +86,7 @@ export function useChatSSE({
         {
           messages: [...messages, { role: "user", content: text }],
           k,
-          embedder_provider: embedderProvider,
+          embeddings_provider: embeddingsProvider,
           use_reranking: useReranking,
           llm_provider: llmProvider,
           llm_model: llmModel,
@@ -165,7 +165,7 @@ export function useChatSSE({
     messages,
     streaming,
     k,
-    embedderProvider,
+    embeddingsProvider,
     useReranking,
     llmProvider,
     llmModel,

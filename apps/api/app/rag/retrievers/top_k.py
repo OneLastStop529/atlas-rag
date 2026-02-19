@@ -14,8 +14,8 @@ from .types import RetrievedChunk
 class TopKRetriever:
     name = "top_k"
 
-    def __init__(self, *, embedder_provider: str = "hash") -> None:
-        self.embedder_provider = embedder_provider
+    def __init__(self, *, embeddings_provider: str = "hash") -> None:
+        self.embeddings_provider = embeddings_provider
 
     def retrieve(
         self, *, query: str, collection_id: str, k: int
@@ -29,8 +29,8 @@ class TopKRetriever:
                     statement_timeout_ms = int(os.getenv("PG_STATEMENT_TIMEOUT_MS", "15000"))
                     cur.execute("SET LOCAL statement_timeout = %s", (statement_timeout_ms,))
                     dim = get_db_vector_dim(cur)
-                    embedder = EmbeddingsProvider(dim=dim, provider=self.embedder_provider)
-                    qvec = embedder.embed_query(query)
+                    embeddings = EmbeddingsProvider(dim=dim, provider=self.embeddings_provider)
+                    qvec = embeddings.embed_query(query)
                     cur.execute(
                         """
                         SELECT

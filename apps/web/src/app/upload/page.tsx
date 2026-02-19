@@ -15,7 +15,7 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [collectionId, setCollectionId] = useState('default');
-  const [embedderProvider, setEmbedderProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
+  const [embeddingsProvider, setEmbeddingsProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
   const [chunkChars, setChunkChars] = useState(700);
 
   const [overlapChars, setOverlapChars] = useState(Math.ceil(chunkChars * 0.14)); // default to 14% of chunk size, which is a common heuristic for good overlap
@@ -62,7 +62,7 @@ export default function UploadPage() {
         collectionId: collectionId,
         chunkChars: chunkChars,
         overlapChars: overlapChars,
-        embedderProvider: embedderProvider,
+        embeddingsProvider,
       });
       console.log("Upload result:", r);
       setResult(r);
@@ -94,14 +94,15 @@ export default function UploadPage() {
       <div style={{ marginTop: 12 }}>
         <label>Embedder Provider</label>
         <select
-          name="embedderProvider"
-          value={embedderProvider}
+          name="embeddingsProvider"
+          value={embeddingsProvider}
           onChange={e => {
-            setEmbedderProvider(e.target.value as EmbeddingsProviderId);
+            setEmbeddingsProvider(e.target.value as EmbeddingsProviderId);
             setFieldErrors(prev => {
               const next = { ...prev };
+              delete next.embeddings_provider;
               delete next.embeddings;
-              delete next.embedderProvider;
+              delete next.embeddingsProvider;
               return next;
             });
           }}
@@ -113,9 +114,9 @@ export default function UploadPage() {
             </option>
           ))}
         </select>
-        {(fieldErrors.embeddings || fieldErrors.embedderProvider) && (
+        {(fieldErrors.embeddings_provider || fieldErrors.embeddings || fieldErrors.embeddingsProvider) && (
           <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>
-            {fieldErrors.embeddings || fieldErrors.embedderProvider}
+            {fieldErrors.embeddings_provider || fieldErrors.embeddings || fieldErrors.embeddingsProvider}
           </div>
         )}
       </div>

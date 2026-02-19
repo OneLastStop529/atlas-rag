@@ -10,7 +10,7 @@ def main():
         query=query,
         k=k,
         collection_id=collection_id,
-        embedder_provider="hash",
+        embeddings_provider="hash",
     )
     citations = to_citations(chunks)
 
