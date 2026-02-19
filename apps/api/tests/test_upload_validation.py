@@ -4,9 +4,11 @@ import unittest
 from io import BytesIO
 from unittest.mock import AsyncMock, patch
 
+from fastapi import HTTPException
 from starlette.datastructures import Headers, UploadFile
 
 from app.api.upload import upload_document
+from app.core.reliability import RetryableDependencyError
 
 
 def make_upload_file(
@@ -98,6 +100,46 @@ class UploadValidationTests(unittest.TestCase):
         self.assertTrue(response["ok"])
         self.assertEqual(response["chunk_config"]["chunk_chars"], 512)
         self.assertEqual(response["chunk_config"]["overlap_chars"], 64)
+
+    @patch("app.api.upload.insert_document_and_chunks")
+    @patch("app.api.upload.EmbeddingsProvider")
+    @patch("app.api.upload.get_db_vector_dim")
+    @patch("app.api.upload.get_conn")
+    @patch("app.api.upload.lc_recursive_ch_text")
+    @patch("app.api.upload.extract_text_from_file", new_callable=AsyncMock)
+    def test_dependency_failure_returns_503_http_exception(
+        self,
+        mock_extract_text,
+        mock_chunk_text,
+        mock_get_conn,
+        mock_get_dim,
+        mock_embeddings_provider,
+        mock_insert,
+    ):
+        mock_extract_text.return_value = "hello world"
+        mock_chunk_text.return_value = ["hello world"]
+        mock_get_dim.return_value = 384
+        mock_insert.return_value = ("doc-123", 1)
+
+        mock_cur = mock_get_conn.return_value.__enter__.return_value.cursor.return_value
+        mock_cur.__enter__.return_value = mock_cur
+
+        mock_embedder = mock_embeddings_provider.return_value
+        mock_embedder.embed_documents.side_effect = RetryableDependencyError("provider down")
+
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(
+                upload_document(
+                    file=make_upload_file(b"hello world"),
+                    collection="default",
+                    embeddings="hash",
+                    chunk_chars=512,
+                    overlap_chars=64,
+                )
+            )
+
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertIn("retryable=True", str(ctx.exception.detail))
 
 
 if __name__ == "__main__":

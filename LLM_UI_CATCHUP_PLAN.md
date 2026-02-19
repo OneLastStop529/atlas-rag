@@ -113,6 +113,66 @@ Notes:
   - `apps/api/scripts/test_upload.py` passes.
   - `apps/api/scripts/retrieve_smoke.py` and `apps/api/scripts/pgvector_smoke.py` currently fail with DB connectivity (`psycopg2.OperationalError`) in this environment.
 
+## Milestone 5 — Retrieval + Infra Hardening (observability/reliability first)
+### 5.1: Reliability baseline (first)
+- Add explicit timeouts/retries/circuit-breaker behavior across retrieval and embedding calls.
+- Add startup/runtime dependency health checks (DB, vector extension, embeddings provider).
+- Add failure-mode tests for degraded paths (provider down, DB unavailable, bad payloads).
+
+Acceptance
+- Service fails fast on hard dependency misconfiguration.
+- Common transient failures are retried with bounded backoff and clear error responses.
+- Smoke suite has stable pass/fail signals for healthy vs degraded environments.
+
+Status: ✅ Completed
+Notes:
+- Added retry/backoff + timeout-budget utilities in `apps/api/app/core/reliability.py`.
+- Wired retrieval/upload/embeddings paths to use bounded retries and DB statement/connect timeouts.
+- Added startup dependency validation + readiness/liveness endpoints in `apps/api/app/main.py`.
+- Added reliability + health regression tests in `apps/api/tests/test_reliability_health.py`.
+
+### 5.2: Observability baseline (second)
+- Introduce structured logs with request IDs and stage-level timing (retrieve, rerank, generate, upload).
+- Add core metrics: request count/error rate/latency percentiles and provider failure counters.
+- Add minimal dashboard + alert thresholds for API and ingestion paths.
+
+Acceptance
+- A single request can be traced end-to-end from logs.
+- Latency and error SLO indicators are visible for chat and upload APIs.
+
+Status: ⏳ Planned
+
+### 5.3: Advanced retrieval rollout (third, behind flags)
+- Add feature-flagged advanced retrieval options (hybrid retrieval, reranker variants, query rewriting policy).
+- Run side-by-side evaluation (baseline vs advanced) with quality/latency/cost tracking.
+- Enable progressive rollout by environment or traffic percentage.
+
+Acceptance
+- Advanced retrieval can be toggled safely without deploy rollback.
+- Evaluation reports show quality delta and latency/cost impact before broad rollout.
+
+Status: ⏳ Planned
+
+### 5.4: Infra deployment hardening (fourth)
+- Standardize deployment checks: readiness/liveness probes, startup sequencing, and config validation.
+- Add runbooks for common incidents (provider outage, vector DB issues, queue backlogs).
+- Add rollback playbook and release gates tied to error/latency thresholds.
+
+Acceptance
+- Deployments have automated health gating and deterministic rollback steps.
+- On-call has documented runbooks for top failure classes.
+
+Status: ⏳ Planned
+
+### 5.5: Optimization pass (after stability)
+- Profile hot paths and tune chunking/retrieval defaults based on observed production metrics.
+- Optimize only after reliability/observability signals are stable.
+
+Acceptance
+- Changes show measurable improvement without SLO regressions.
+
+Status: ⏳ Planned
+
 ## Open Questions
 - Should we prioritize local HF model loading or external TGI first?
 - Do we want to keep the current “hash” embedder for demo mode?
@@ -124,3 +184,4 @@ Notes:
 2) Milestone 2 (UI/UX parity for LLM controls)
 3) Milestone 3 (retrieval upgrades)
 4) Milestone 4 (ingestion UX parity)
+5) Milestone 5 (retrieval + infra hardening with reliability/observability first)

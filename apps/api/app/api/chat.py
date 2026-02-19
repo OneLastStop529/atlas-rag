@@ -11,6 +11,7 @@ from typing import Literal
 from app.providers.factory import get_llm_provider
 from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
+from app.core.reliability import DependencyError
 from app.rag.retriever import build_context, retrieve_chunks, to_citations, get_reformulations
 
 
@@ -131,7 +132,17 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
         yield sse("citations", {"items": citations})
         yield sse("done", {"ok": True})
     except Exception as e:
-        yield sse("error", {"message": str(e)})
+        if isinstance(e, DependencyError):
+            yield sse(
+                "error",
+                {
+                    "message": str(e),
+                    "retryable": e.retryable,
+                    "code": "DEPENDENCY_ERROR",
+                },
+            )
+        else:
+            yield sse("error", {"message": str(e)})
         yield sse("done", {"ok": False})
 
 

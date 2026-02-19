@@ -1,7 +1,13 @@
 from __future__ import annotations
 import os
+import time
 from typing import List
 from langchain.embeddings.base import Embeddings
+from app.core.reliability import (
+    dependency_timeout_seconds,
+    enforce_timeout_budget,
+    retry_with_backoff,
+)
 
 
 class EmbeddingsProvider(Embeddings):
@@ -66,11 +72,31 @@ class EmbeddingsProvider(Embeddings):
             raise NotImplementedError(
                 "embed_documents must be implemented by EmbeddingsProvider subclasses"
             )
-        return self._impl.embed_documents(texts)
+        started_at = time.monotonic()
+        vectors = retry_with_backoff(
+            lambda: self._impl.embed_documents(texts),
+            operation=f"embed_documents[{self.model_name}]",
+        )
+        enforce_timeout_budget(
+            started_at=started_at,
+            timeout_seconds=dependency_timeout_seconds(),
+            operation=f"embed_documents[{self.model_name}]",
+        )
+        return vectors
 
     def embed_query(self, text: str) -> List[float]:
         if self._impl is None:
             raise NotImplementedError(
                 "embed_query must be implemented by EmbeddingsProvider subclasses"
             )
-        return self._impl.embed_query(text)
+        started_at = time.monotonic()
+        vector = retry_with_backoff(
+            lambda: self._impl.embed_query(text),
+            operation=f"embed_query[{self.model_name}]",
+        )
+        enforce_timeout_budget(
+            started_at=started_at,
+            timeout_seconds=dependency_timeout_seconds(),
+            operation=f"embed_query[{self.model_name}]",
+        )
+        return vector

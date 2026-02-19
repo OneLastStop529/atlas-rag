@@ -8,11 +8,16 @@ from pgvector.psycopg2 import register_vector
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", settings.database_url)
-engine = create_engine(DATABASE_URL, future=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_engine(DATABASE_URL, future=True) if DATABASE_URL else None
+SessionLocal = (
+    sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
+)
 
 
 def get_conn():
-    conn = psycopg2.connect(DATABASE_URL)
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set")
+    connect_timeout = int(os.getenv("PG_CONNECT_TIMEOUT_SECONDS", "5"))
+    conn = psycopg2.connect(DATABASE_URL, connect_timeout=connect_timeout)
     register_vector(conn)
     return conn

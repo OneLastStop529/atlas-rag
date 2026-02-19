@@ -1,4 +1,5 @@
 from io import BytesIO
+import os
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
@@ -6,6 +7,10 @@ from pypdf import PdfReader
 from app.ingest.chunker import ChunkConfig, lc_recursive_ch_text
 from app.ingest.store import insert_document_and_chunks
 from app.ingest.pgvector_dim import get_db_vector_dim
+from app.core.reliability import (
+    DependencyError,
+    retry_with_backoff,
+)
 from app.db import get_conn
 from app.providers.embeddings.base import EmbeddingsProvider
 
@@ -147,9 +152,14 @@ async def upload_document(
             )
 
         # Get database vector dimension
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                dim = get_db_vector_dim(cur)
+        def _resolve_vector_dim() -> int:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    statement_timeout_ms = int(os.getenv("PG_STATEMENT_TIMEOUT_MS", "15000"))
+                    cur.execute("SET LOCAL statement_timeout = %s", (statement_timeout_ms,))
+                    return get_db_vector_dim(cur)
+
+        dim = retry_with_backoff(_resolve_vector_dim, operation="upload_vector_dim")
 
         # Generate embeddings
 
@@ -158,12 +168,15 @@ async def upload_document(
         embeddings_list = embedder_provider.embed_documents(chunks)
 
         # Store document and chunks
-        doc_id, num_chunks = insert_document_and_chunks(
-            collection_id=collection,
-            file_name=file.filename,
-            mime_type=file.content_type,
-            chunks=chunks,
-            embeddings=embeddings_list,
+        doc_id, num_chunks = retry_with_backoff(
+            lambda: insert_document_and_chunks(
+                collection_id=collection,
+                file_name=file.filename,
+                mime_type=file.content_type,
+                chunks=chunks,
+                embeddings=embeddings_list,
+            ),
+            operation="upload_insert_chunks",
         )
 
         return {
@@ -185,5 +198,10 @@ async def upload_document(
             detail = str(e.detail)
             return validation_error(detail, {"file": detail})
         raise
+    except DependencyError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Dependency unavailable (retryable={e.retryable}): {e}",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
