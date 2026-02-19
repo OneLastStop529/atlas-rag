@@ -138,7 +138,7 @@ def smoke_upload_dependency_503() -> None:
                                 asyncio.run(
                                     upload_document(
                                         file=_make_upload_file(b"hello"),
-                                        embeddings="hash",
+                                        embeddings_provider="hash",
                                         chunk_chars=128,
                                         overlap_chars=16,
                                     )

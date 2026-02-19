@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatSSE } from "@/hooks/useChatSSE";
 import { getChunk, Chunk } from "@/lib/api";
 import {
@@ -34,8 +34,8 @@ export default function Page() {
     try {
       const detail = await getChunk(chunkId);
       setSelected(detail);
-    } catch (err: any) {
-      setSelectedErr(err.message || "Failed to load chunk");
+    } catch (err: unknown) {
+      setSelectedErr(err instanceof Error ? err.message : "Failed to load chunk");
     } finally {
       setLoadingChunk(false);
     }
@@ -60,9 +60,7 @@ export default function Page() {
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
     const storedTopK = window.localStorage.getItem("rag.topK");
-    const storedEmbeddingsProvider =
-      window.localStorage.getItem("rag.embeddingsProvider") ||
-      window.localStorage.getItem("rag.embedderProvider");
+    const storedEmbeddingsProvider = window.localStorage.getItem("rag.embeddingsProvider");
     const storedHistory = window.localStorage.getItem("rag.history");
     if (storedProvider) setLlmProvider(storedProvider);
     if (storedModel) setLlmModel(storedModel);
@@ -112,11 +110,6 @@ export default function Page() {
     setHistory((items) => [entry, ...items].slice(0, 5));
   }, [streaming, messages]);
 
-  const lastAssitant = useMemo(() => {
-    const last = messages[messages.length - 1];
-    return last?.role === "assistant" ? last.content : "";
-  }, [messages]);
-
   async function testLlmConnection() {
     setTestingLlm(true);
     setLlmTestStatus(null);
@@ -145,8 +138,8 @@ export default function Page() {
 
       if (!response.ok) throw new Error(detail);
       setLlmTestStatus(detail);
-    } catch (err: any) {
-      setLlmTestStatus(err?.message || "Test failed");
+    } catch (err: unknown) {
+      setLlmTestStatus(err instanceof Error ? err.message : "Test failed");
     } finally {
       setTestingLlm(false);
     }
@@ -216,7 +209,7 @@ export default function Page() {
             />
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Embedder</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Embeddings Provider</span>
             <select
               value={embeddingsProvider}
               onChange={(e) => setEmbeddingsProvider(e.target.value as EmbeddingsProviderId)}
@@ -241,7 +234,7 @@ export default function Page() {
         </div>
       </section>
 
-      <div style={{ border: "1pc solid #ddd", borderRadius: 12, padding: 12, minHeight: 280 }}>
+      <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12, minHeight: 280 }}>
         {messages.map((msg, idx) => (
           <div key={idx} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 12, opacity: 0.6 }}>{msg.role.toUpperCase()}</div>

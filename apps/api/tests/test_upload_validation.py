@@ -30,7 +30,7 @@ class UploadValidationTests(unittest.TestCase):
         response = asyncio.run(
             upload_document(
             file=make_upload_file(b"hello world"),
-            embeddings="not-a-provider",
+            embeddings_provider="not-a-provider",
             chunk_chars=700,
             overlap_chars=100,
             )
@@ -46,7 +46,7 @@ class UploadValidationTests(unittest.TestCase):
         response = asyncio.run(
             upload_document(
             file=make_upload_file(b"hello world"),
-            embeddings="hash",
+            embeddings_provider="hash",
             chunk_chars=100,
             overlap_chars=100,
             )
@@ -83,15 +83,15 @@ class UploadValidationTests(unittest.TestCase):
         mock_cur = mock_get_conn.return_value.__enter__.return_value.cursor.return_value
         mock_cur.__enter__.return_value = mock_cur
 
-        mock_embedder = mock_embeddings_provider.return_value
-        mock_embedder.embed_documents.return_value = [[0.1] * 384]
+        mock_embeddings_impl = mock_embeddings_provider.return_value
+        mock_embeddings_impl.embed_documents.return_value = [[0.1] * 384]
         mock_insert.return_value = ("doc-123", 1)
 
         response = asyncio.run(
             upload_document(
                 file=make_upload_file(b"hello world"),
                 collection="default",
-                embeddings="hash",
+                embeddings_provider="hash",
                 chunk_chars=512,
                 overlap_chars=64,
             )
@@ -124,15 +124,15 @@ class UploadValidationTests(unittest.TestCase):
         mock_cur = mock_get_conn.return_value.__enter__.return_value.cursor.return_value
         mock_cur.__enter__.return_value = mock_cur
 
-        mock_embedder = mock_embeddings_provider.return_value
-        mock_embedder.embed_documents.side_effect = RetryableDependencyError("provider down")
+        mock_embeddings_impl = mock_embeddings_provider.return_value
+        mock_embeddings_impl.embed_documents.side_effect = RetryableDependencyError("provider down")
 
         with self.assertRaises(HTTPException) as ctx:
             asyncio.run(
                 upload_document(
                     file=make_upload_file(b"hello world"),
                     collection="default",
-                    embeddings="hash",
+                    embeddings_provider="hash",
                     chunk_chars=512,
                     overlap_chars=64,
                 )

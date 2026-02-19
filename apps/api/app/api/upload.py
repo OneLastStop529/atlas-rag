@@ -81,7 +81,6 @@ async def upload_document(
     chunk_chars: int = Form(default=700),
     overlap_chars: int = Form(default=100),
     embeddings_provider: str | None = Form(default=None),
-    embeddings: str | None = Form(default=None),
 ):
     """Upload and ingest a document into the vector database."""
 
@@ -98,9 +97,7 @@ async def upload_document(
         )
 
     resolved_embeddings_provider = normalize_embeddings_provider_id(
-        _coerce_optional_str(embeddings_provider)
-        or _coerce_optional_str(embeddings)
-        or "sentence-transformers"
+        _coerce_optional_str(embeddings_provider) or "sentence-transformers"
     )
 
     # Validate embeddings provider

@@ -92,7 +92,7 @@ export default function UploadPage() {
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <label>Embedder Provider</label>
+        <label>Embeddings Provider</label>
         <select
           name="embeddingsProvider"
           value={embeddingsProvider}
@@ -101,8 +101,6 @@ export default function UploadPage() {
             setFieldErrors(prev => {
               const next = { ...prev };
               delete next.embeddings_provider;
-              delete next.embeddings;
-              delete next.embeddingsProvider;
               return next;
             });
           }}
@@ -114,9 +112,9 @@ export default function UploadPage() {
             </option>
           ))}
         </select>
-        {(fieldErrors.embeddings_provider || fieldErrors.embeddings || fieldErrors.embeddingsProvider) && (
+        {fieldErrors.embeddings_provider && (
           <div style={{ marginTop: 6, color: "#c62828", fontSize: 13 }}>
-            {fieldErrors.embeddings_provider || fieldErrors.embeddings || fieldErrors.embeddingsProvider}
+            {fieldErrors.embeddings_provider}
           </div>
         )}
       </div>

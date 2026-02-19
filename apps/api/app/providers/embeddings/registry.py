@@ -17,7 +17,6 @@ EMBEDDINGS_PROVIDER_ALIASES = {
     "bge_large": "bge-large-zh",
     "bge-small": "bge-small-zh",
     "bge-large": "bge-large-zh",
-    "embedder": "sentence-transformers",
 }
 
 
@@ -79,4 +78,3 @@ def create_embeddings_provider(*, provider: str, dim: int | None = None):
         return BGELargeEmbeddings()
 
     raise ValueError(f"Unknown embeddings provider: {provider}")
-

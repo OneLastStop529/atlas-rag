@@ -16,9 +16,7 @@ def retrieve(payload: dict):
         query=payload["query"],
         collection_id=payload.get("collection_id", "default"),
         k=payload.get("k", 5),
-        embeddings_provider=payload.get(
-            "embeddings_provider", payload.get("embedder_provider", "hash")
-        ),
+        embeddings_provider=payload.get("embeddings_provider", "hash"),
         retriever_provider=payload.get("retriever_provider"),
         use_reranking=payload.get("use_reranking", False),
     )

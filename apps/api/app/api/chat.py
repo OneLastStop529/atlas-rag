@@ -34,7 +34,6 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage] = Field(default_factory=list)
     k: int = Field(default=5, ge=1, le=50)
     embeddings_provider: Optional[str] = None
-    embedder_provider: Optional[str] = None  # Backward-compatible alias
     retriever_provider: Optional[str] = None
     use_reranking: bool = False
     llm_provider: Optional[str] = None
@@ -77,7 +76,7 @@ def _extract_query(llm: Any, params: ChatRequest) -> str:
 
 
 def _retrieve_chunks(params: ChatRequest, query: str):
-    embeddings_provider = params.embeddings_provider or params.embedder_provider or "hash"
+    embeddings_provider = params.embeddings_provider or "hash"
     return retrieve_chunks(
         query=query,
         collection_id=params.collection_id,

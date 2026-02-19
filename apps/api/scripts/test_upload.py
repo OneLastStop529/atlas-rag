@@ -71,11 +71,11 @@ def test_embeddings():
     try:
         # Test with hash embeddings (doesn't require ML models)
 
-        embedder = EmbeddingsProvider(
+        embeddings_provider = EmbeddingsProvider(
             dim=384, provider="hash"
         )  # Validate provider choice
         test_chunks = ["This is a test chunk", "Another test chunk"]
-        embeddings = embedder.embed_documents(test_chunks)
+        embeddings = embeddings_provider.embed_documents(test_chunks)
 
         print(
             f"Generated {len(embeddings)} embeddings of dimension {len(embeddings[0])}"

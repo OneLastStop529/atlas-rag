@@ -35,8 +35,8 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
-export interface DocumentListResponse extends PaginatedResponse<Document> { }
-export interface ChunkListResponse extends PaginatedResponse<Chunk> { }
+export type DocumentListResponse = PaginatedResponse<Document>;
+export type ChunkListResponse = PaginatedResponse<Chunk>;
 export interface DocumentChunksResponse {
   document_id: string;
   file_name: string;

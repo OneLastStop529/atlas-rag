@@ -172,6 +172,7 @@ export function useChatSSE({
     llmBaseUrl,
     onToken,
     onCitation,
+    onReformulations,
     onError,
     onComplete,
   ]);
