@@ -191,6 +191,14 @@ Acceptance
 
 Status: ⏳ Planned
 
+5.3 Closeout Checklist
+- [ ] Aggregate `retrieval_shadow_eval` into a report/dashboard (quality overlap, latency deltas, sample size).
+- [ ] Add per-request cost proxies to shadow eval output and baseline vs advanced cost deltas.
+- [ ] Define environment defaults (`dev`, `staging`, `prod`) for rollout/eval flags and document promotion gates.
+- [ ] Smoke-test advanced retrieval toggle safety (off/on) without deploy rollback.
+- [ ] Run E2E scenarios for baseline-only, sampled shadow eval, and rollout at 0%/partial/100%.
+- [ ] Attach closeout evidence (test results, smoke commands, dashboard/report links) and mark 5.3 complete.
+
 ### 5.4: Infra deployment hardening (fourth)
 - Standardize deployment checks: readiness/liveness probes, startup sequencing, and config validation.
 - Add runbooks for common incidents (provider outage, vector DB issues, queue backlogs).
