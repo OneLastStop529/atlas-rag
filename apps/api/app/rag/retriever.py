@@ -19,6 +19,10 @@ def retrieve(payload: dict):
         embeddings_provider=payload.get("embeddings_provider", "hash"),
         retriever_provider=payload.get("retriever_provider"),
         use_reranking=payload.get("use_reranking", False),
+        retrieval_strategy=payload.get("retrieval_strategy", "baseline"),
+        query_rewrite_policy=payload.get("query_rewrite_policy", "disabled"),
+        reranker_variant=payload.get("reranker_variant", "rrf_simple"),
+        advanced_enabled=payload.get("advanced_enabled", False),
     )
     return {
         "context": build_context(chunks, max_chars=4000),
@@ -33,6 +37,10 @@ def retrieve_chunks(
     embeddings_provider: str = "hash",
     retriever_provider: Optional[str] = None,
     use_reranking: bool = False,
+    retrieval_strategy: str = "baseline",
+    query_rewrite_policy: str = "disabled",
+    reranker_variant: str = "rrf_simple",
+    advanced_enabled: bool = False,
     rrf_k: int = 60,
     per_query_k: Optional[int] = None,
 ) -> List[RetrievedChunk]:
@@ -53,8 +61,17 @@ def retrieve_chunks(
     if not query:
         return []
 
-    reformulations = _simple_reformulations(query) if use_reranking else [query]
-    per_query_k = per_query_k or (max(k, 10) if use_reranking else k)
+    effective_use_reranking = _effective_reranking(
+        use_reranking=use_reranking,
+        retrieval_strategy=retrieval_strategy,
+        advanced_enabled=advanced_enabled,
+    )
+    reformulations = get_reformulations(
+        query,
+        use_reranking=effective_use_reranking,
+        query_rewrite_policy=query_rewrite_policy,
+    )
+    per_query_k = per_query_k or (max(k, 10) if effective_use_reranking else k)
 
     retriever = get_retriever(
         retriever_provider, embeddings_provider=embeddings_provider
@@ -69,9 +86,11 @@ def retrieve_chunks(
             )
         )
 
-    if not use_reranking:
+    if not effective_use_reranking:
         return results_by_query[0] if results_by_query else []
 
+    # RRF remains the default fusion path; reranker variant is wired for future strategies.
+    _ = reranker_variant
     fused = _rrf_fuse(results_by_query, rrf_k=rrf_k)
     return fused[:k]
 
@@ -89,10 +108,34 @@ def _simple_reformulations(query: str) -> List[str]:
     return out
 
 
-def get_reformulations(query: str, *, use_reranking: bool) -> List[str]:
+def get_reformulations(
+    query: str, *, use_reranking: bool, query_rewrite_policy: str = "disabled"
+) -> List[str]:
     if not query:
         return []
-    return _simple_reformulations(query) if use_reranking else [query]
+    if not use_reranking:
+        return [query]
+
+    rewrite_policy = (query_rewrite_policy or "disabled").strip().lower()
+    if rewrite_policy == "disabled":
+        return [query]
+    if rewrite_policy in {"simple", "llm"}:
+        return _simple_reformulations(query)
+    return [query]
+
+
+def _effective_reranking(
+    *,
+    use_reranking: bool,
+    retrieval_strategy: str,
+    advanced_enabled: bool,
+) -> bool:
+    if advanced_enabled and retrieval_strategy in {
+        "advanced_hybrid",
+        "advanced_hybrid_rerank",
+    }:
+        return True
+    return use_reranking
 
 
 def _rrf_fuse(

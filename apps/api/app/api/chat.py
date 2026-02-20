@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+from contextlib import contextmanager
+from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, AsyncGenerator, List, Optional
 
@@ -17,6 +19,7 @@ from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
 from app.core.reliability import DependencyError
 from app.rag.retriever import build_context, retrieve_chunks, to_citations, get_reformulations
+from app.rag.retrieval_strategy import resolve_retrieval_plan
 
 
 logger = logging.getLogger(__name__)
@@ -83,7 +86,7 @@ def _extract_query(llm: Any, params: ChatRequest) -> str:
     return llm.latest_user_text([m.model_dump() for m in params.messages])
 
 
-def _retrieve_chunks(params: ChatRequest, query: str):
+def _retrieve_chunks(params: ChatRequest, query: str, retrieval_plan):
     embeddings_provider = params.embeddings_provider or "hash"
     return retrieve_chunks(
         query=query,
@@ -91,7 +94,11 @@ def _retrieve_chunks(params: ChatRequest, query: str):
         k=params.k,
         embeddings_provider=embeddings_provider,
         retriever_provider=params.retriever_provider,
-        use_reranking=params.use_reranking,
+        use_reranking=retrieval_plan.use_reranking,
+        retrieval_strategy=retrieval_plan.retrieval_strategy,
+        query_rewrite_policy=retrieval_plan.query_rewrite_policy,
+        reranker_variant=retrieval_plan.reranker_variant,
+        advanced_enabled=retrieval_plan.advanced_enabled,
     )
 
 
@@ -128,22 +135,70 @@ def _dependency_from_error_code(error_code: str) -> str:
     return "chat"
 
 
-async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, None]:
-    token = set_request_id(request_id)
-    request_started_at = perf_counter()
-    stage_timings_ms: dict[str, int] = {}
-    failed_stage: str | None = None
-    log_ctx: dict[str, Any] = {}
+@dataclass(frozen=True)
+class ChatExecutionContext:
+    params: ChatRequest
+    llm: Any
+    query: str
+    retrieval_plan: Any
+    log_ctx: dict[str, Any]
 
-    def _stage_completed(stage: str, started_at: float) -> None:
-        duration_ms = int((perf_counter() - started_at) * 1000)
-        stage_timings_ms[stage] = duration_ms
-        logger.info(
-            "chat_stage_completed",
-            extra={"stage": stage, "duration_ms": duration_ms, **log_ctx},
-        )
 
-    def _stage_failed(stage: str, started_at: float, exc: Exception) -> None:
+def _build_log_context(
+    *, params: ChatRequest, llm: Any, advanced_cfg: Any, retrieval_plan: Any
+) -> dict[str, Any]:
+    return {
+        "collection_id": params.collection_id,
+        "embeddings_provider": params.embeddings_provider or "hash",
+        "llm_provider": getattr(llm, "name", None),
+        "adv_retrieval_enabled": advanced_cfg.enabled,
+        "retrieval_strategy": advanced_cfg.retrieval_strategy,
+        "reranker_variant": advanced_cfg.reranker_variant,
+        "query_rewrite_policy": advanced_cfg.query_rewrite_policy,
+        "adv_retrieval_rollout_percent": advanced_cfg.rollout_percent,
+        "use_reranking_effective": retrieval_plan.use_reranking,
+    }
+
+
+def _build_chat_execution_context(payload: dict, request_id: str) -> ChatExecutionContext:
+    params = ChatRequest.model_validate(payload)
+    advanced_cfg = resolve_advanced_retrieval_config(
+        request_payload=params.model_dump(exclude_none=True),
+        request_id=request_id,
+    )
+    retrieval_plan = resolve_retrieval_plan(
+        request_use_reranking=params.use_reranking,
+        advanced_cfg=advanced_cfg,
+    )
+    llm = _select_llm(params)
+    query = _extract_query(llm, params)
+    return ChatExecutionContext(
+        params=params,
+        llm=llm,
+        query=query,
+        retrieval_plan=retrieval_plan,
+        log_ctx=_build_log_context(
+            params=params,
+            llm=llm,
+            advanced_cfg=advanced_cfg,
+            retrieval_plan=retrieval_plan,
+        ),
+    )
+
+
+@contextmanager
+def _run_stage(
+    *,
+    stage: str,
+    stage_timings_ms: dict[str, int],
+    log_ctx: dict[str, Any],
+    failed_stage_ref: list[str | None],
+):
+    started_at = perf_counter()
+    try:
+        yield
+    except Exception as exc:
+        failed_stage_ref[0] = stage
         duration_ms = int((perf_counter() - started_at) * 1000)
         logger.exception(
             "chat_stage_failed",
@@ -154,28 +209,55 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
                 **log_ctx,
             },
         )
+        raise
+    else:
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        stage_timings_ms[stage] = duration_ms
+        logger.info(
+            "chat_stage_completed",
+            extra={"stage": stage, "duration_ms": duration_ms, **log_ctx},
+        )
+
+
+def _emit_chat_pipeline_summary(
+    *,
+    status: str,
+    request_started_at: float,
+    stage_timings_ms: dict[str, int],
+    log_ctx: dict[str, Any],
+    failed_stage: str | None = None,
+    error_code: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "status": status,
+        "stages_ms": stage_timings_ms,
+        "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
+        **log_ctx,
+    }
+    if failed_stage is not None:
+        payload["failed_stage"] = failed_stage
+    if error_code is not None:
+        payload["error_code"] = error_code
+    logger.info("chat_pipeline_summary", extra=payload)
+
+
+async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, None]:
+    token = set_request_id(request_id)
+    request_started_at = perf_counter()
+    stage_timings_ms: dict[str, int] = {}
+    failed_stage_ref: list[str | None] = [None]
+    log_ctx: dict[str, Any] = {}
 
     try:
         inc_chat_stream_lifecycle(status="started")
-        params = ChatRequest.model_validate(payload)
-        advanced_cfg = resolve_advanced_retrieval_config(
-            request_payload=params.model_dump(exclude_none=True),
-            request_id=request_id,
-        )
-        llm = _select_llm(params)
-        query = _extract_query(llm, params)
-        log_ctx = {
-            "collection_id": params.collection_id,
-            "embeddings_provider": params.embeddings_provider or "hash",
-            "llm_provider": getattr(llm, "name", None),
-            "adv_retrieval_enabled": advanced_cfg.enabled,
-            "retrieval_strategy": advanced_cfg.retrieval_strategy,
-            "reranker_variant": advanced_cfg.reranker_variant,
-            "query_rewrite_policy": advanced_cfg.query_rewrite_policy,
-            "adv_retrieval_rollout_percent": advanced_cfg.rollout_percent,
-        }
+        execution = _build_chat_execution_context(payload, request_id)
+        params = execution.params
+        retrieval_plan = execution.retrieval_plan
+        query = execution.query
+        llm = execution.llm
+        log_ctx = execution.log_ctx
 
-        if not query:
+        if not execution.query:
             yield sse("error", {"message": "No user query found in messages"})
             yield sse("done", {})
             return
@@ -186,27 +268,27 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
             extra=log_ctx,
         )
 
-        if params.use_reranking:
-            stage_started_at = perf_counter()
-            try:
+        if execution.retrieval_plan.use_reranking:
+            with _run_stage(
+                stage="rerank",
+                stage_timings_ms=stage_timings_ms,
+                log_ctx=log_ctx,
+                failed_stage_ref=failed_stage_ref,
+            ):
                 reformulations = get_reformulations(
-                    query, use_reranking=params.use_reranking
+                    query,
+                    use_reranking=execution.retrieval_plan.use_reranking,
+                    query_rewrite_policy=execution.retrieval_plan.query_rewrite_policy,
                 )
-            except Exception as exc:
-                failed_stage = "rerank"
-                _stage_failed("rerank", stage_started_at, exc)
-                raise
-            _stage_completed("rerank", stage_started_at)
             yield sse("reformulations", {"items": reformulations})
 
-        stage_started_at = perf_counter()
-        try:
-            chunks = _retrieve_chunks(params, query)
-        except Exception as exc:
-            failed_stage = "retrieve"
-            _stage_failed("retrieve", stage_started_at, exc)
-            raise
-        _stage_completed("retrieve", stage_started_at)
+        with _run_stage(
+            stage="retrieve",
+            stage_timings_ms=stage_timings_ms,
+            log_ctx=log_ctx,
+            failed_stage_ref=failed_stage_ref,
+        ):
+            chunks = _retrieve_chunks(params, query, retrieval_plan)
         logger.info(
             "retrieval_count",
             extra={
@@ -215,39 +297,35 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
             },
         )
 
-        stage_started_at = perf_counter()
-        try:
+        with _run_stage(
+            stage="build_context",
+            stage_timings_ms=stage_timings_ms,
+            log_ctx=log_ctx,
+            failed_stage_ref=failed_stage_ref,
+        ):
             context = build_context(chunks, max_chars=4000)
-        except Exception as exc:
-            failed_stage = "build_context"
-            _stage_failed("build_context", stage_started_at, exc)
-            raise
-        _stage_completed("build_context", stage_started_at)
         citations = to_citations(chunks)
 
-        stage_started_at = perf_counter()
-        try:
+        with _run_stage(
+            stage="generate",
+            stage_timings_ms=stage_timings_ms,
+            log_ctx=log_ctx,
+            failed_stage_ref=failed_stage_ref,
+        ):
             async for chunk in _stream_llm_answer(llm=llm, query=query, context=context):
                 yield chunk
-        except Exception as exc:
-            failed_stage = "generate"
-            _stage_failed("generate", stage_started_at, exc)
-            raise
-        _stage_completed("generate", stage_started_at)
 
         yield sse("citations", {"items": citations})
         yield sse("done", {"ok": True})
         inc_chat_stream_lifecycle(status="completed")
-        logger.info(
-            "chat_pipeline_summary",
-            extra={
-                "status": "ok",
-                "stages_ms": stage_timings_ms,
-                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
-                **log_ctx,
-            },
+        _emit_chat_pipeline_summary(
+            status="ok",
+            request_started_at=request_started_at,
+            stage_timings_ms=stage_timings_ms,
+            log_ctx=log_ctx,
         )
     except Exception as e:
+        failed_stage = failed_stage_ref[0]
         error_code = _chat_error_code(e, failed_stage)
         inc_chat_stream_lifecycle(status="failed")
         inc_provider_failure(
@@ -263,16 +341,13 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
                 **log_ctx,
             },
         )
-        logger.info(
-            "chat_pipeline_summary",
-            extra={
-                "status": "error",
-                "failed_stage": failed_stage or "unknown",
-                "error_code": error_code,
-                "stages_ms": stage_timings_ms,
-                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
-                **log_ctx,
-            },
+        _emit_chat_pipeline_summary(
+            status="error",
+            failed_stage=failed_stage or "unknown",
+            error_code=error_code,
+            request_started_at=request_started_at,
+            stage_timings_ms=stage_timings_ms,
+            log_ctx=log_ctx,
         )
         if isinstance(e, DependencyError):
             yield sse(
