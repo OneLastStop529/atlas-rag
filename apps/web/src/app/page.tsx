@@ -8,6 +8,12 @@ import {
   EmbeddingsProviderId,
 } from "@/lib/embeddings";
 
+type HistoryItem = {
+  id: string;
+  question: string;
+  answer: string;
+  expanded: boolean;
+};
 
 export default function Page() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
@@ -20,10 +26,11 @@ export default function Page() {
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [topK, setTopK] = useState(5);
   const [advancedRetrieval, setAdvancedRetrieval] = useState(false);
-  const [embeddingsProvider, setEmbeddingsProvider] = useState<EmbeddingsProviderId>("sentence-transformers");
+  const [embeddingsProvider, setEmbeddingsProvider] =
+    useState<EmbeddingsProviderId>("sentence-transformers");
   const [testingLlm, setTestingLlm] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null);
-  const [history, setHistory] = useState<Array<{ id: string; question: string; answer: string; expanded: boolean }>>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [reformulations, setReformulations] = useState<string[]>([]);
   const lastHistoryKeyRef = useRef<string>("");
 
@@ -53,15 +60,17 @@ export default function Page() {
     onReformulations: (items) => setReformulations(items),
   });
 
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedProvider = window.localStorage.getItem("llm.provider");
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
     const storedTopK = window.localStorage.getItem("rag.topK");
-    const storedEmbeddingsProvider = window.localStorage.getItem("rag.embeddingsProvider");
+    const storedEmbeddingsProvider = window.localStorage.getItem(
+      "rag.embeddingsProvider"
+    );
     const storedHistory = window.localStorage.getItem("rag.history");
+
     if (storedProvider) setLlmProvider(storedProvider);
     if (storedModel) setLlmModel(storedModel);
     if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
@@ -96,12 +105,16 @@ export default function Page() {
   useEffect(() => {
     if (streaming) return;
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const lastAssistant = [...messages].reverse().find(
+      (m) => m.role === "assistant"
+    );
     if (!lastUser || !lastAssistant) return;
+
     const key = `${lastUser.content}::${lastAssistant.content}`;
     if (key === lastHistoryKeyRef.current) return;
+
     lastHistoryKeyRef.current = key;
-    const entry = {
+    const entry: HistoryItem = {
       id: `${Date.now()}`,
       question: lastUser.content,
       answer: lastAssistant.content,
@@ -130,10 +143,13 @@ export default function Page() {
       try {
         const data = await response.json();
         if (!response.ok) detail = data?.detail || "Test failed";
-        else detail = `OK: ${data?.provider || "llm"}${data?.sample ? " - " + data.sample : ""}`;
+        else {
+          detail = `OK: ${data?.provider || "llm"}${
+            data?.sample ? ` - ${data.sample}` : ""
+          }`;
+        }
       } catch {
-        if (!response.ok) detail = `HTTP ${response.status}`;
-        else detail = "OK";
+        detail = response.ok ? "OK" : `HTTP ${response.status}`;
       }
 
       if (!response.ok) throw new Error(detail);
@@ -145,127 +161,179 @@ export default function Page() {
     }
   }
 
-
-
-
+  function onSend() {
+    if (!input.trim()) return;
+    send(input);
+    setInput("");
+  }
 
   return (
-    <main style={{ maxWidth: 900, margin: "40px auto", }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Atlas RAG</h1>
+    <main className="app-shell">
+      <header className="app-header">
+        <h1>Atlas RAG</h1>
+        <p>Ask grounded questions and inspect citations instantly.</p>
+      </header>
 
-      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>LLM Settings</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Provider</span>
-            <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}>
-              <option value="ollama">ollama</option>
-              <option value="openai">openai</option>
-            </select>
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 220 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Model</span>
-            <input
-              value={llmModel}
-              onChange={(e) => setLlmModel(e.target.value)}
-              placeholder="e.g. llama3.1:8b"
-              style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-            />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 260 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Base URL</span>
-            <input
-              value={llmBaseUrl}
-              onChange={(e) => setLlmBaseUrl(e.target.value)}
-              placeholder="http://localhost:11434"
-              style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-            />
-          </label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, justifyContent: "flex-end" }}>
-            <button onClick={testLlmConnection} disabled={testingLlm} style={{ padding: "8px 12px" }}>
+      <div className="dashboard-grid">
+        <section className="panel">
+          <div className="panel-title-row">
+            <h2>LLM Settings</h2>
+            <button
+              className="btn btn-secondary"
+              onClick={testLlmConnection}
+              disabled={testingLlm}
+            >
               {testingLlm ? "Testing..." : "Test Connection"}
             </button>
           </div>
-        </div>
-        {llmTestStatus && (
-          <div style={{ marginTop: 8, fontSize: 12, color: llmTestStatus.startsWith("OK") ? "green" : "crimson" }}>
-            {llmTestStatus}
+          <div className="field-grid">
+            <label className="field">
+              <span>Provider</span>
+              <select
+                value={llmProvider}
+                onChange={(e) => setLlmProvider(e.target.value)}
+              >
+                <option value="ollama">ollama</option>
+                <option value="openai">openai</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Model</span>
+              <input
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value)}
+                placeholder="e.g. llama3.1:8b"
+              />
+            </label>
+            <label className="field">
+              <span>Base URL</span>
+              <input
+                value={llmBaseUrl}
+                onChange={(e) => setLlmBaseUrl(e.target.value)}
+                placeholder="http://localhost:11434"
+              />
+            </label>
           </div>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Retrieval Controls</div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Top-k</span>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(e) => setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-              style={{ width: 120, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-            />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Embeddings Provider</span>
-            <select
-              value={embeddingsProvider}
-              onChange={(e) => setEmbeddingsProvider(e.target.value as EmbeddingsProviderId)}
-              style={{ minWidth: 220, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+          {llmTestStatus && (
+            <p
+              className={`status-line ${
+                llmTestStatus.startsWith("OK") ? "ok" : "error"
+              }`}
             >
-              {EMBEDDINGS_PROVIDER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }} title="Advanced retrieval not available yet">
-            <input
-              type="checkbox"
-              checked={advancedRetrieval}
-              onChange={(e) => setAdvancedRetrieval(e.target.checked)}
-              disabled
-            />
-            <span style={{ fontSize: 13, opacity: 0.7 }}>Advanced retrieval (coming soon)</span>
-          </label>
-        </div>
-      </section>
+              {llmTestStatus}
+            </p>
+          )}
+        </section>
 
-      <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12, minHeight: 280 }}>
-        {messages.map((msg, idx) => (
-          <div key={idx} style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>{msg.role.toUpperCase()}</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+        <section className="panel">
+          <h2>Retrieval Controls</h2>
+          <div className="field-grid">
+            <label className="field">
+              <span>Top-k</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={topK}
+                onChange={(e) =>
+                  setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Embeddings</span>
+              <select
+                value={embeddingsProvider}
+                onChange={(e) =>
+                  setEmbeddingsProvider(e.target.value as EmbeddingsProviderId)
+                }
+              >
+                {EMBEDDINGS_PROVIDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field checkbox-field" title="Coming soon">
+              <input
+                type="checkbox"
+                checked={advancedRetrieval}
+                onChange={(e) => setAdvancedRetrieval(e.target.checked)}
+                disabled
+              />
+              <span>Advanced retrieval (coming soon)</span>
+            </label>
           </div>
-        ))}
-        {messages.length === 0 && <div style={{ opacity: 0.6 }}>Ask something...</div>}
+        </section>
       </div>
 
+      <section className="panel chat-panel">
+        <div className="panel-title-row">
+          <h2>Conversation</h2>
+          <button
+            className="btn btn-secondary"
+            onClick={reset}
+            disabled={streaming && messages.length === 0}
+          >
+            Reset
+          </button>
+        </div>
+
+        <div className="message-list">
+          {messages.length === 0 && (
+            <div className="empty-state">Start by asking a question below.</div>
+          )}
+          {messages.map((msg, idx) => (
+            <article key={idx} className={`msg ${msg.role}`}>
+              <div className="msg-role">{msg.role}</div>
+              <div className="msg-content">{msg.content}</div>
+            </article>
+          ))}
+        </div>
+
+        <div className="composer-row">
+          <input
+            id="chat-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSend();
+              }
+            }}
+            placeholder="Ask a question..."
+          />
+          <button className="btn" onClick={onSend} disabled={streaming || !input.trim()}>
+            Send
+          </button>
+          <button className="btn btn-secondary" onClick={stop} disabled={!streaming}>
+            Stop
+          </button>
+        </div>
+      </section>
+
       {advancedRetrieval && reformulations.length > 0 && (
-        <section style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Reformulations</h2>
-          <ul style={{ paddingLeft: 18, margin: 0 }}>
+        <section className="panel">
+          <h2>Reformulations</h2>
+          <ul className="simple-list">
             {reformulations.map((item, idx) => (
-              <li key={`${item}-${idx}`} style={{ opacity: 0.8 }}>
-                {item}
-              </li>
+              <li key={`${item}-${idx}`}>{item}</li>
             ))}
           </ul>
         </section>
       )}
 
       {history.length > 0 && (
-        <section style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Recent Q&A</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <section className="panel">
+          <h2>Recent Q&A</h2>
+          <div className="history-list">
             {history.map((item) => (
-              <div key={item.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Q</div>
-                <div style={{ fontWeight: 600 }}>{item.question}</div>
+              <article key={item.id} className="history-item">
+                <strong>{item.question}</strong>
                 <button
+                  className="link-btn"
                   onClick={() =>
                     setHistory((items) =>
                       items.map((entry) =>
@@ -275,60 +343,32 @@ export default function Page() {
                       )
                     )
                   }
-                  style={{ marginTop: 6, fontSize: 12, textDecoration: "underline", background: "none", border: "none", padding: 0, cursor: "pointer" }}
                 >
                   {item.expanded ? "Hide answer" : "Show answer"}
                 </button>
-                {item.expanded && (
-                  <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{item.answer}</div>
-                )}
-              </div>
+                {item.expanded && <p>{item.answer}</p>}
+              </article>
             ))}
           </div>
         </section>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <input
-          id="chat-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send(input);
-              setInput("");
-            }
-          }}
-          placeholder="Ask a question..."
-          style={{ flex: 1, padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-        />
-        <button onClick={() => { send(input); setInput("") }} disabled={streaming} style={{ padding: "10px 14px" }}>
-          Send
-        </button>
-        <button onClick={stop} disabled={!streaming} style={{ padding: "10px 14px" }}>
-          Stop
-        </button>
-        <button onClick={reset} disabled={streaming && messages.length === 0} style={{ padding: "10px 14px" }}>
-          Reset
-        </button>
-      </div>
       {citations.length > 0 && (
-        <section style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Citations</h2>
-          <ul style={{ paddingLeft: 18 }}>
+        <section className="panel">
+          <h2>Citations</h2>
+          <ul className="simple-list">
             {citations.map((c, idx) => (
               <li key={idx}>
                 <button
+                  className="link-btn"
                   onClick={() => c.chunk_id && openCitation(c.chunk_id)}
                   disabled={!c.chunk_id || loadingChunk}
-                  style={{ textDecoration: "underline", color: "blue", background: "none", border: "none", padding: 0, cursor: c.chunk_id ? "pointer" : "default" }}
                 >
-                  {c.source ?? "source"} {"--"}
-                  {c.page ? `p ${c.page}` : ""} {"--"}
-                  {c.chunk_index ? `chunk ${c.chunk_index}` : ""}
+                  {c.source ?? "source"}
+                  {c.page ? ` · p${c.page}` : ""}
+                  {c.chunk_index ? ` · chunk ${c.chunk_index}` : ""}
                 </button>
-                <span style={{ opacity: 0.8 }}>{c.snippet ?? ""}</span>
+                <span className="citation-snippet">{c.snippet ?? ""}</span>
               </li>
             ))}
           </ul>
@@ -336,42 +376,30 @@ export default function Page() {
       )}
 
       {(loadingChunk || selected || selectedErr) && (
-        <aside
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            width: 420,
-            height: "100vh",
-            borderLeft: "1px solid #ddd",
-            background: "white",
-            padding: 16,
-            overflow: "auto",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Citation</strong>
-            <button onClick={() => { setSelected(null); setSelectedErr(null); }}>Close</button>
+        <aside className="citation-drawer">
+          <div className="panel-title-row">
+            <h2>Citation</h2>
+            <button className="btn btn-secondary" onClick={() => {
+              setSelected(null);
+              setSelectedErr(null);
+            }}>
+              Close
+            </button>
           </div>
 
-          {loadingChunk && <div style={{ marginTop: 12 }}>Loading…</div>}
-          {selectedErr && <div style={{ marginTop: 12, color: "crimson" }}>{selectedErr}</div>}
+          {loadingChunk && <div>Loading…</div>}
+          {selectedErr && <p className="status-line error">{selectedErr}</p>}
 
           {selected && (
             <>
-              <div style={{ marginTop: 12, opacity: 0.8 }}>
+              <div className="chunk-meta">
                 <div><strong>Source:</strong> {selected.source}</div>
                 <div><strong>Chunk:</strong> {selected.chunk_id}</div>
               </div>
 
-              <pre style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>
-                {selected.content}
-              </pre>
-
+              <pre>{selected.content}</pre>
               {selected.meta && Object.keys(selected.meta).length > 0 && (
-                <pre style={{ marginTop: 12, opacity: 0.8 }}>
-                  {JSON.stringify(selected.meta, null, 2)}
-                </pre>
+                <pre>{JSON.stringify(selected.meta, null, 2)}</pre>
               )}
             </>
           )}
