@@ -292,3 +292,102 @@ body {
     flex: 1;
   }
 }
+
+/* Minimal shared styles for upload page */
+.atlas-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.atlas-hero h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.atlas-hero p {
+  margin: 8px 0 0;
+  opacity: 0.75;
+}
+
+.atlas-card {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.atlas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.atlas-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.atlas-field input,
+.atlas-field select {
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+}
+
+.atlas-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.atlas-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #0070f3;
+  background: #0070f3;
+  color: #fff;
+  cursor: pointer;
+}
+
+.atlas-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.atlas-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.atlas-muted {
+  opacity: 0.7;
+  font-size: 13px;
+}
+
+.atlas-error {
+  color: #c62828;
+  font-size: 13px;
+}
+
+.atlas-warn {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff4e5;
+  border-radius: 8px;
+  border: 1px solid #ffcc80;
+  color: #8a4b00;
+}
+
+.atlas-pre {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f0f0f0;
+  overflow-x: auto;
+}
