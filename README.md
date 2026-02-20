@@ -1,6 +1,9 @@
 # atlas-rag
 Atlas(RAG) is a production-oriented Retrieval Augmented Generation (RAG) platform for chatting with your documents using streaming responses and source citations. Under the hood it pairs a FastAPI backend with pgvector-powered similarity search and a Next.js frontend for uploads, search, and chat-style Q&A, giving you a clear local-to-prod path for document ingestion and retrieval.
 
+## Milestone plan
+- Project milestone tracking and closeout checklist: `RAG_MILESTONE_PLAN.md`
+
 ## Local setup (frontend + backend + database)
 This repo is split into:
 - `apps/web`: Next.js frontend
