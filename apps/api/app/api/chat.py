@@ -109,6 +109,14 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
             return
 
         logger.debug("chat_params", extra={"params": params.model_dump()})
+        logger.info(
+            "chat_request_received",
+            extra={
+                "collection_id": params.collection_id,
+                "embeddings_provider": params.embeddings_provider or "hash",
+                "llm_provider": getattr(llm, "name", None),
+            },
+        )
 
         if params.use_reranking:
             reformulations = get_reformulations(
@@ -122,6 +130,8 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
             extra={
                 "count": len(chunks),
                 "collection_id": params.collection_id,
+                "embeddings_provider": params.embeddings_provider or "hash",
+                "llm_provider": getattr(llm, "name", None),
             },
         )
         context = build_context(chunks, max_chars=4000)

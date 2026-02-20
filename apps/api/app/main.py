@@ -1,8 +1,8 @@
 import logging
-import os
+from time import perf_counter
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,15 +16,17 @@ from .core.health import (
     check_vector_extension,
     get_readiness_payload,
 )
+from .core.observability import (
+    configure_logging,
+    generate_request_id,
+    reset_request_id,
+    set_request_id,
+)
 from .providers.factory import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
-if not logging.getLogger().handlers:
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+configure_logging()
 
 
 @asynccontextmanager
@@ -51,6 +53,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_observability_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    token = set_request_id(request_id)
+    start = perf_counter()
+    path = request.url.path
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        latency_ms = int((perf_counter() - start) * 1000)
+        logger.exception(
+            "request_failed",
+            extra={
+                "route": path,
+                "method": request.method,
+                "status_code": 500,
+                "latency_ms": latency_ms,
+            },
+        )
+        raise
+    else:
+        response.headers["X-Request-ID"] = request_id
+        latency_ms = int((perf_counter() - start) * 1000)
+        logger.info(
+            "request_completed",
+            extra={
+                "route": path,
+                "method": request.method,
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+            },
+        )
+        return response
+    finally:
+        # Keep request-scoped context bounded to a single request.
+        reset_request_id(token)
 
 
 @app.get("/health")

@@ -1,4 +1,5 @@
 from io import BytesIO
+import logging
 import os
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
@@ -19,6 +20,7 @@ from app.providers.embeddings.registry import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = {
     "text/plain": "txt",
@@ -167,8 +169,6 @@ async def upload_document(
         dim = retry_with_backoff(_resolve_vector_dim, operation="upload_vector_dim")
 
         # Generate embeddings
-
-        #
         embeddings_impl = EmbeddingsProvider(
             dim=dim, provider=resolved_embeddings_provider
         )
@@ -186,7 +186,7 @@ async def upload_document(
             operation="upload_insert_chunks",
         )
 
-        return {
+        payload = {
             "ok": True,
             "doc_id": doc_id,
             "filename": file.filename,
@@ -199,6 +199,15 @@ async def upload_document(
             },
             "embeddings_provider": resolved_embeddings_provider,
         }
+        logger.info(
+            "upload_ingested",
+            extra={
+                "collection_id": collection,
+                "embeddings_provider": resolved_embeddings_provider,
+                "chunk_count": num_chunks,
+            },
+        )
+        return payload
 
     except HTTPException as e:
         if e.status_code == 400:
