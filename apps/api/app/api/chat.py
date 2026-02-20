@@ -20,6 +20,7 @@ from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
 from app.core.reliability import DependencyError
 from app.rag.retriever import build_context, retrieve_chunks, to_citations, get_reformulations
+from app.rag.retrievers.types import RetrievedChunk
 from app.rag.retrieval_strategy import (
     resolve_retrieval_plan,
     resolve_shadow_retrieval_plan,
@@ -57,6 +58,7 @@ class ChatRequest(BaseModel):
     query_rewrite_policy: Optional[str] = None
     adv_retrieval_eval_mode: Optional[str] = None
     adv_retrieval_eval_sample_percent: Optional[int] = None
+    adv_retrieval_eval_timeout_ms: Optional[int] = None
 
 
 def _build_llm_provider(provider: str | None, model: str | None, base_url: str | None):
@@ -166,6 +168,7 @@ def _build_log_context(
         "adv_retrieval_rollout_percent": advanced_cfg.rollout_percent,
         "adv_retrieval_eval_mode": advanced_cfg.adv_retrieval_eval_mode,
         "adv_retrieval_eval_sample_percent": advanced_cfg.adv_retrieval_eval_sample_percent,
+        "adv_retrieval_eval_timeout_ms": advanced_cfg.adv_retrieval_eval_timeout_ms,
         "use_reranking_effective": retrieval_plan.use_reranking,
     }
 
@@ -256,36 +259,101 @@ async def _run_shadow_retrieval(
     *,
     params: ChatRequest,
     query: str,
+    primary_plan: Any,
+    primary_chunks: list[RetrievedChunk],
+    primary_latency_ms: int,
     shadow_plan: Any,
     request_id: str,
     log_ctx: dict[str, Any],
+    timeout_ms: int,
 ) -> None:
     token = set_request_id(request_id)
     started_at = perf_counter()
     try:
-        shadow_chunks = await asyncio.to_thread(_retrieve_chunks, params, query, shadow_plan)
-        logger.info(
-            "retrieval_shadow_completed",
-            extra={
-                "shadow_strategy": shadow_plan.retrieval_strategy,
-                "shadow_use_reranking": shadow_plan.use_reranking,
-                "shadow_count": len(shadow_chunks),
-                "shadow_latency_ms": int((perf_counter() - started_at) * 1000),
-                **log_ctx,
-            },
+        shadow_chunks = await asyncio.wait_for(
+            asyncio.to_thread(_retrieve_chunks, params, query, shadow_plan),
+            timeout=timeout_ms / 1000.0,
         )
-    except Exception:
-        logger.exception(
-            "retrieval_shadow_failed",
-            extra={
-                "shadow_strategy": shadow_plan.retrieval_strategy,
-                "shadow_use_reranking": shadow_plan.use_reranking,
-                "shadow_latency_ms": int((perf_counter() - started_at) * 1000),
-                **log_ctx,
-            },
+        _emit_retrieval_shadow_eval(
+            primary_plan=primary_plan,
+            primary_chunks=primary_chunks,
+            primary_latency_ms=primary_latency_ms,
+            shadow_plan=shadow_plan,
+            shadow_chunks=shadow_chunks,
+            shadow_latency_ms=int((perf_counter() - started_at) * 1000),
+            status="ok",
+            log_ctx=log_ctx,
+        )
+    except Exception as exc:
+        logger.exception("retrieval_shadow_failed", extra={"shadow_error": str(exc), **log_ctx})
+        _emit_retrieval_shadow_eval(
+            primary_plan=primary_plan,
+            primary_chunks=primary_chunks,
+            primary_latency_ms=primary_latency_ms,
+            shadow_plan=shadow_plan,
+            shadow_chunks=[],
+            shadow_latency_ms=int((perf_counter() - started_at) * 1000),
+            status="error",
+            shadow_error=str(exc),
+            log_ctx=log_ctx,
         )
     finally:
         reset_request_id(token)
+
+
+def _emit_retrieval_shadow_eval(
+    *,
+    primary_plan: Any,
+    primary_chunks: list[RetrievedChunk],
+    primary_latency_ms: int,
+    shadow_plan: Any,
+    shadow_chunks: list[RetrievedChunk],
+    shadow_latency_ms: int,
+    status: str,
+    log_ctx: dict[str, Any],
+    shadow_error: str | None = None,
+) -> None:
+    primary_ids = _chunk_ids(primary_chunks)
+    shadow_ids = _chunk_ids(shadow_chunks)
+    shared_ids = len(primary_ids & shadow_ids)
+    union_ids = len(primary_ids | shadow_ids)
+    jaccard = (shared_ids / union_ids) if union_ids else 0.0
+
+    logger.info(
+        "retrieval_shadow_eval",
+        extra={
+            "status": status,
+            "primary_strategy": primary_plan.retrieval_strategy,
+            "shadow_strategy": shadow_plan.retrieval_strategy,
+            "primary_use_reranking": primary_plan.use_reranking,
+            "shadow_use_reranking": shadow_plan.use_reranking,
+            "primary_count": len(primary_chunks),
+            "shadow_count": len(shadow_chunks),
+            "shared_chunk_ids": shared_ids,
+            "jaccard": round(jaccard, 4),
+            "primary_latency_ms": primary_latency_ms,
+            "shadow_latency_ms": shadow_latency_ms,
+            "top1_source_same": _top1_source_same(primary_chunks, shadow_chunks),
+            "shadow_error": shadow_error,
+            **log_ctx,
+        },
+    )
+
+
+def _chunk_ids(chunks: list[RetrievedChunk]) -> set[str]:
+    ids: set[str] = set()
+    for chunk in chunks:
+        if chunk.chunk_id:
+            ids.add(chunk.chunk_id)
+    return ids
+
+
+def _top1_source_same(
+    primary_chunks: list[RetrievedChunk], shadow_chunks: list[RetrievedChunk]
+) -> bool:
+    if not primary_chunks or not shadow_chunks:
+        return False
+    return primary_chunks[0].source == shadow_chunks[0].source
 
 
 async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, None]:
@@ -315,29 +383,6 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
             extra=log_ctx,
         )
 
-        if should_run_shadow_eval(
-            advanced_cfg=execution.advanced_cfg,
-            request_id=request_id,
-        ):
-            shadow_plan = resolve_shadow_retrieval_plan(execution.retrieval_plan)
-            logger.info(
-                "retrieval_shadow_started",
-                extra={
-                    "primary_strategy": execution.retrieval_plan.retrieval_strategy,
-                    "shadow_strategy": shadow_plan.retrieval_strategy,
-                    **log_ctx,
-                },
-            )
-            asyncio.create_task(
-                _run_shadow_retrieval(
-                    params=params,
-                    query=query,
-                    shadow_plan=shadow_plan,
-                    request_id=request_id,
-                    log_ctx=log_ctx,
-                )
-            )
-
         if execution.retrieval_plan.use_reranking:
             with _run_stage(
                 stage="rerank",
@@ -366,6 +411,35 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
                 **log_ctx,
             },
         )
+
+        if should_run_shadow_eval(
+            advanced_cfg=execution.advanced_cfg,
+            request_id=request_id,
+        ):
+            shadow_plan = resolve_shadow_retrieval_plan(execution.retrieval_plan)
+            primary_latency_ms = stage_timings_ms.get("retrieve", 0)
+            logger.info(
+                "retrieval_shadow_started",
+                extra={
+                    "primary_strategy": execution.retrieval_plan.retrieval_strategy,
+                    "shadow_strategy": shadow_plan.retrieval_strategy,
+                    "shadow_timeout_ms": execution.advanced_cfg.adv_retrieval_eval_timeout_ms,
+                    **log_ctx,
+                },
+            )
+            asyncio.create_task(
+                _run_shadow_retrieval(
+                    params=params,
+                    query=query,
+                    primary_plan=execution.retrieval_plan,
+                    primary_chunks=chunks,
+                    primary_latency_ms=primary_latency_ms,
+                    shadow_plan=shadow_plan,
+                    request_id=request_id,
+                    log_ctx=log_ctx,
+                    timeout_ms=execution.advanced_cfg.adv_retrieval_eval_timeout_ms,
+                )
+            )
 
         with _run_stage(
             stage="build_context",

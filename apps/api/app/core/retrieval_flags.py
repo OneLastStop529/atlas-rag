@@ -34,6 +34,7 @@ class AdvancedRetrievalConfig:
     from_request_override: bool
     adv_retrieval_eval_mode: str | None = None
     adv_retrieval_eval_sample_percent: int | None = None
+    adv_retrieval_eval_timeout_ms: int = 2000
 
 
 def resolve_advanced_retrieval_config(
@@ -48,6 +49,7 @@ def resolve_advanced_retrieval_config(
     raw_rollout_percent = settings.adv_retrieval_rollout_percent
     raw_eval_mode = settings.adv_retrieval_eval_mode
     raw_eval_sample_percent = settings.adv_retrieval_eval_sample_percent
+    raw_eval_timeout_ms = settings.adv_retrieval_eval_timeout_ms
 
     used_request_override = False
 
@@ -71,6 +73,9 @@ def resolve_advanced_retrieval_config(
         if payload.get("adv_retrieval_eval_sample_percent") is not None:
             raw_eval_sample_percent = payload["adv_retrieval_eval_sample_percent"]
             used_request_override = True
+        if payload.get("adv_retrieval_eval_timeout_ms") is not None:
+            raw_eval_timeout_ms = payload["adv_retrieval_eval_timeout_ms"]
+            used_request_override = True
 
     strategy = _normalize_enum(
         raw_value=raw_strategy,
@@ -93,6 +98,7 @@ def resolve_advanced_retrieval_config(
         fallback="off",
     )
     adv_retrieval_eval_sample_percent = _clamp_rollout_percent(raw_eval_sample_percent)
+    adv_retrieval_eval_timeout_ms = _clamp_timeout_ms(raw_eval_timeout_ms)
 
     rollout_percent = _clamp_rollout_percent(raw_rollout_percent)
     rollout_enabled = _rollout_enabled(
@@ -109,6 +115,7 @@ def resolve_advanced_retrieval_config(
         from_request_override=used_request_override,
         adv_retrieval_eval_mode=adv_retrieval_eval_mode,
         adv_retrieval_eval_sample_percent=adv_retrieval_eval_sample_percent,
+        adv_retrieval_eval_timeout_ms=adv_retrieval_eval_timeout_ms,
     )
 
 
@@ -137,3 +144,11 @@ def _rollout_enabled(*, request_id: str | None, rollout_percent: int) -> bool:
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     bucket = int(digest[:8], 16) % 100
     return bucket < rollout_percent
+
+
+def _clamp_timeout_ms(raw_timeout_ms: Any) -> int:
+    try:
+        parsed = int(raw_timeout_ms)
+    except (TypeError, ValueError):
+        return 2000
+    return max(250, min(30000, parsed))
