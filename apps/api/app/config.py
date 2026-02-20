@@ -1,9 +1,16 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     database_url: str | None = None
+    adv_retrieval_enabled: bool = False
+    adv_retrieval_allow_request_override: bool = False
+    retrieval_strategy: str = "baseline"
+    reranker_variant: str = "rrf_simple"
+    query_rewrite_policy: str = "disabled"
+    adv_retrieval_rollout_percent: int = Field(default=0, ge=0, le=100)
 
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 

@@ -11,6 +11,7 @@ from typing import Literal
 
 from app.core.observability import get_request_id, reset_request_id, set_request_id
 from app.core.metrics import inc_chat_stream_lifecycle, inc_provider_failure
+from app.core.retrieval_flags import resolve_advanced_retrieval_config
 from app.providers.factory import get_llm_provider
 from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
@@ -42,6 +43,10 @@ class ChatRequest(BaseModel):
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
     llm_base_url: Optional[str] = None
+    adv_retrieval_enabled: Optional[bool] = None
+    retrieval_strategy: Optional[str] = None
+    reranker_variant: Optional[str] = None
+    query_rewrite_policy: Optional[str] = None
 
 
 def _build_llm_provider(provider: str | None, model: str | None, base_url: str | None):
@@ -153,12 +158,21 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
     try:
         inc_chat_stream_lifecycle(status="started")
         params = ChatRequest.model_validate(payload)
+        advanced_cfg = resolve_advanced_retrieval_config(
+            request_payload=params.model_dump(exclude_none=True),
+            request_id=request_id,
+        )
         llm = _select_llm(params)
         query = _extract_query(llm, params)
         log_ctx = {
             "collection_id": params.collection_id,
             "embeddings_provider": params.embeddings_provider or "hash",
             "llm_provider": getattr(llm, "name", None),
+            "adv_retrieval_enabled": advanced_cfg.enabled,
+            "retrieval_strategy": advanced_cfg.retrieval_strategy,
+            "reranker_variant": advanced_cfg.reranker_variant,
+            "query_rewrite_policy": advanced_cfg.query_rewrite_policy,
+            "adv_retrieval_rollout_percent": advanced_cfg.rollout_percent,
         }
 
         if not query:
