@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     reranker_variant: str = "rrf_simple"
     query_rewrite_policy: str = "disabled"
     adv_retrieval_rollout_percent: int = Field(default=0, ge=0, le=100)
+    adv_retrieval_eval_mode: str | None = None
+    adv_retrieval_eval_sample_percent: int | None = Field(default=None, ge=0, le=100)
 
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 

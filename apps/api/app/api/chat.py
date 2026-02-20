@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass
 from time import perf_counter
@@ -19,7 +20,11 @@ from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
 from app.core.reliability import DependencyError
 from app.rag.retriever import build_context, retrieve_chunks, to_citations, get_reformulations
-from app.rag.retrieval_strategy import resolve_retrieval_plan
+from app.rag.retrieval_strategy import (
+    resolve_retrieval_plan,
+    resolve_shadow_retrieval_plan,
+    should_run_shadow_eval,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -142,6 +147,7 @@ class ChatExecutionContext:
     params: ChatRequest
     llm: Any
     query: str
+    advanced_cfg: Any
     retrieval_plan: Any
     log_ctx: dict[str, Any]
 
@@ -180,6 +186,7 @@ def _build_chat_execution_context(payload: dict, request_id: str) -> ChatExecuti
         params=params,
         llm=llm,
         query=query,
+        advanced_cfg=advanced_cfg,
         retrieval_plan=retrieval_plan,
         log_ctx=_build_log_context(
             params=params,
@@ -245,6 +252,42 @@ def _emit_chat_pipeline_summary(
     logger.info("chat_pipeline_summary", extra=payload)
 
 
+async def _run_shadow_retrieval(
+    *,
+    params: ChatRequest,
+    query: str,
+    shadow_plan: Any,
+    request_id: str,
+    log_ctx: dict[str, Any],
+) -> None:
+    token = set_request_id(request_id)
+    started_at = perf_counter()
+    try:
+        shadow_chunks = await asyncio.to_thread(_retrieve_chunks, params, query, shadow_plan)
+        logger.info(
+            "retrieval_shadow_completed",
+            extra={
+                "shadow_strategy": shadow_plan.retrieval_strategy,
+                "shadow_use_reranking": shadow_plan.use_reranking,
+                "shadow_count": len(shadow_chunks),
+                "shadow_latency_ms": int((perf_counter() - started_at) * 1000),
+                **log_ctx,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "retrieval_shadow_failed",
+            extra={
+                "shadow_strategy": shadow_plan.retrieval_strategy,
+                "shadow_use_reranking": shadow_plan.use_reranking,
+                "shadow_latency_ms": int((perf_counter() - started_at) * 1000),
+                **log_ctx,
+            },
+        )
+    finally:
+        reset_request_id(token)
+
+
 async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, None]:
     token = set_request_id(request_id)
     request_started_at = perf_counter()
@@ -271,6 +314,29 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
             "chat_request_received",
             extra=log_ctx,
         )
+
+        if should_run_shadow_eval(
+            advanced_cfg=execution.advanced_cfg,
+            request_id=request_id,
+        ):
+            shadow_plan = resolve_shadow_retrieval_plan(execution.retrieval_plan)
+            logger.info(
+                "retrieval_shadow_started",
+                extra={
+                    "primary_strategy": execution.retrieval_plan.retrieval_strategy,
+                    "shadow_strategy": shadow_plan.retrieval_strategy,
+                    **log_ctx,
+                },
+            )
+            asyncio.create_task(
+                _run_shadow_retrieval(
+                    params=params,
+                    query=query,
+                    shadow_plan=shadow_plan,
+                    request_id=request_id,
+                    log_ctx=log_ctx,
+                )
+            )
 
         if execution.retrieval_plan.use_reranking:
             with _run_stage(

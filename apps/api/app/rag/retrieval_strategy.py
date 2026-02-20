@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 from app.core.retrieval_flags import AdvancedRetrievalConfig
@@ -36,3 +37,44 @@ def resolve_retrieval_plan(
         reranker_variant=advanced_cfg.reranker_variant,
         use_reranking=use_reranking,
     )
+
+
+def resolve_shadow_retrieval_plan(primary_plan: RetrievalPlan) -> RetrievalPlan:
+    if primary_plan.retrieval_strategy in {"advanced_hybrid", "advanced_hybrid_rerank"}:
+        return RetrievalPlan(
+            advanced_enabled=False,
+            retrieval_strategy="baseline",
+            query_rewrite_policy="disabled",
+            reranker_variant=primary_plan.reranker_variant,
+            use_reranking=False,
+        )
+
+    return RetrievalPlan(
+        advanced_enabled=True,
+        retrieval_strategy="advanced_hybrid",
+        query_rewrite_policy=(
+            primary_plan.query_rewrite_policy
+            if primary_plan.query_rewrite_policy != "disabled"
+            else "simple"
+        ),
+        reranker_variant=primary_plan.reranker_variant,
+        use_reranking=True,
+    )
+
+
+def should_run_shadow_eval(
+    *, advanced_cfg: AdvancedRetrievalConfig, request_id: str | None
+) -> bool:
+    if advanced_cfg.adv_retrieval_eval_mode != "shadow":
+        return False
+
+    sample_percent = int(advanced_cfg.adv_retrieval_eval_sample_percent or 0)
+    if sample_percent <= 0:
+        return False
+    if sample_percent >= 100:
+        return True
+
+    seed = request_id or "anonymous"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    bucket = int(digest[:8], 16) % 100
+    return bucket < sample_percent
