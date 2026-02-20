@@ -21,6 +21,8 @@ ALLOWED_QUERY_REWRITE_POLICIES = {
     "llm",
 }
 
+ADV_RETRIEVAL_EVAL_MODE = {"off", "shadow"}
+
 
 @dataclass(frozen=True)
 class AdvancedRetrievalConfig:
@@ -30,6 +32,8 @@ class AdvancedRetrievalConfig:
     query_rewrite_policy: str
     rollout_percent: int
     from_request_override: bool
+    adv_retrieval_eval_mode: str | None = None
+    adv_retrieval_eval_sample_percent: int | None = None
 
 
 def resolve_advanced_retrieval_config(
@@ -42,6 +46,9 @@ def resolve_advanced_retrieval_config(
     raw_reranker = settings.reranker_variant
     raw_rewrite_policy = settings.query_rewrite_policy
     raw_rollout_percent = settings.adv_retrieval_rollout_percent
+    raw_eval_mode = settings.adv_retrieval_eval_mode
+    raw_eval_sample_percent = settings.adv_retrieval_eval_sample_percent
+
     used_request_override = False
 
     payload = request_payload or {}
@@ -57,6 +64,12 @@ def resolve_advanced_retrieval_config(
             used_request_override = True
         if payload.get("query_rewrite_policy"):
             raw_rewrite_policy = str(payload["query_rewrite_policy"])
+            used_request_override = True
+        if payload.get("adv_retrieval_eval_mode"):
+            raw_eval_mode = str(payload["adv_retrieval_eval_mode"])
+            used_request_override = True
+        if payload.get("adv_retrieval_eval_sample_percent") is not None:
+            raw_eval_sample_percent = payload["adv_retrieval_eval_sample_percent"]
             used_request_override = True
 
     strategy = _normalize_enum(
@@ -74,6 +87,13 @@ def resolve_advanced_retrieval_config(
         allowed_values=ALLOWED_QUERY_REWRITE_POLICIES,
         fallback="disabled",
     )
+    adv_retrieval_eval_mode = _normalize_enum(
+        raw_value=raw_eval_mode,
+        allowed_values=ADV_RETRIEVAL_EVAL_MODE,
+        fallback="off",
+    )
+    adv_retrieval_eval_sample_percent = _clamp_rollout_percent(raw_eval_sample_percent)
+
     rollout_percent = _clamp_rollout_percent(raw_rollout_percent)
     rollout_enabled = _rollout_enabled(
         request_id=request_id,
@@ -87,12 +107,12 @@ def resolve_advanced_retrieval_config(
         query_rewrite_policy=query_rewrite_policy,
         rollout_percent=rollout_percent,
         from_request_override=used_request_override,
+        adv_retrieval_eval_mode=adv_retrieval_eval_mode,
+        adv_retrieval_eval_sample_percent=adv_retrieval_eval_sample_percent,
     )
 
 
-def _normalize_enum(
-    *, raw_value: Any, allowed_values: set[str], fallback: str
-) -> str:
+def _normalize_enum(*, raw_value: Any, allowed_values: set[str], fallback: str) -> str:
     value = str(raw_value or "").strip().lower()
     if value in allowed_values:
         return value

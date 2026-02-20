@@ -13,6 +13,8 @@ class RetrievalFlagsTests(unittest.TestCase):
             "reranker_variant": settings.reranker_variant,
             "query_rewrite_policy": settings.query_rewrite_policy,
             "adv_retrieval_rollout_percent": settings.adv_retrieval_rollout_percent,
+            "adv_retrieval_eval_mode": settings.adv_retrieval_eval_mode,
+            "adv_retrieval_eval_sample_percent": settings.adv_retrieval_eval_sample_percent,
         }
 
     def tearDown(self):
@@ -79,6 +81,35 @@ class RetrievalFlagsTests(unittest.TestCase):
         )
 
         self.assertFalse(cfg.enabled)
+
+    def test_eval_defaults_to_off_with_zero_sampling(self):
+        settings.adv_retrieval_eval_mode = None
+        settings.adv_retrieval_eval_sample_percent = None
+
+        cfg = resolve_advanced_retrieval_config(
+            request_payload={},
+            request_id="rid-5",
+        )
+
+        self.assertEqual(cfg.adv_retrieval_eval_mode, "off")
+        self.assertEqual(cfg.adv_retrieval_eval_sample_percent, 0)
+
+    def test_eval_overrides_are_applied_when_request_override_allowed(self):
+        settings.adv_retrieval_allow_request_override = True
+        settings.adv_retrieval_eval_mode = "off"
+        settings.adv_retrieval_eval_sample_percent = 0
+
+        cfg = resolve_advanced_retrieval_config(
+            request_payload={
+                "adv_retrieval_eval_mode": "shadow",
+                "adv_retrieval_eval_sample_percent": 25,
+            },
+            request_id="rid-6",
+        )
+
+        self.assertEqual(cfg.adv_retrieval_eval_mode, "shadow")
+        self.assertEqual(cfg.adv_retrieval_eval_sample_percent, 25)
+        self.assertTrue(cfg.from_request_override)
 
 
 if __name__ == "__main__":

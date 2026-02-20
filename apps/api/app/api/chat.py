@@ -50,6 +50,8 @@ class ChatRequest(BaseModel):
     retrieval_strategy: Optional[str] = None
     reranker_variant: Optional[str] = None
     query_rewrite_policy: Optional[str] = None
+    adv_retrieval_eval_mode: Optional[str] = None
+    adv_retrieval_eval_sample_percent: Optional[int] = None
 
 
 def _build_llm_provider(provider: str | None, model: str | None, base_url: str | None):
@@ -156,6 +158,8 @@ def _build_log_context(
         "reranker_variant": advanced_cfg.reranker_variant,
         "query_rewrite_policy": advanced_cfg.query_rewrite_policy,
         "adv_retrieval_rollout_percent": advanced_cfg.rollout_percent,
+        "adv_retrieval_eval_mode": advanced_cfg.adv_retrieval_eval_mode,
+        "adv_retrieval_eval_sample_percent": advanced_cfg.adv_retrieval_eval_sample_percent,
         "use_reranking_effective": retrieval_plan.use_reranking,
     }
 
