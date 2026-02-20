@@ -3,6 +3,16 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --bg: #f3f6fb;
+  --panel: #ffffff;
+  --text: #111827;
+  --muted: #5f6b7a;
+  --border: #d8dfeb;
+  --primary: #2457f5;
+  --primary-strong: #1842c3;
+  --danger: #c92a2a;
+  --ok: #1f8f3a;
 }
 
 @theme inline {
@@ -19,10 +29,268 @@
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Main page (Version 2) styles scoped to Atlas chat page only. */
+.app-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  background: radial-gradient(1200px 600px at 20% -20%, #dbe7ff 0%, var(--bg) 50%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app-shell .app-header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.app-shell .app-header p {
+  margin-top: 0.35rem;
+  color: var(--muted);
+}
+
+.app-shell .dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.app-shell .panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  box-shadow: 0 8px 20px rgba(20, 39, 74, 0.06);
+  margin-top: 1rem;
+}
+
+.app-shell .panel h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.app-shell .panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-shell .field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.app-shell .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.app-shell .field span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.app-shell input,
+.app-shell select,
+.app-shell button {
+  font: inherit;
+}
+
+.app-shell input,
+.app-shell select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: white;
+}
+
+.app-shell .checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-shell .checkbox-field span {
+  font-size: 0.9rem;
+}
+
+.app-shell .btn {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: white;
+  border-radius: 10px;
+  padding: 0.58rem 0.85rem;
+  cursor: pointer;
+}
+
+.app-shell .btn:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+
+.app-shell .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.app-shell .btn-secondary {
+  background: white;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app-shell .chat-panel {
+  margin-top: 1rem;
+}
+
+.app-shell .message-list {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.8rem;
+  min-height: 280px;
+  background: #f9fbff;
+}
+
+.app-shell .empty-state {
+  color: var(--muted);
+}
+
+.app-shell .msg {
+  margin-bottom: 0.7rem;
+  padding: 0.6rem;
+  border-radius: 10px;
+}
+
+.app-shell .msg.user {
+  background: #e6efff;
+}
+
+.app-shell .msg.assistant {
+  background: #edf9ef;
+}
+
+.app-shell .msg-role {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.app-shell .msg-content {
+  white-space: pre-wrap;
+}
+
+.app-shell .composer-row {
+  margin-top: 0.8rem;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.app-shell .composer-row input {
+  flex: 1;
+}
+
+.app-shell .simple-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.app-shell .history-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.app-shell .history-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem;
+}
+
+.app-shell .history-item p {
+  margin: 0.55rem 0 0;
+  white-space: pre-wrap;
+}
+
+.app-shell .link-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  margin-left: 0.35rem;
+}
+
+.app-shell .citation-snippet {
+  margin-left: 0.35rem;
+  color: var(--muted);
+}
+
+.app-shell .status-line {
+  margin: 0.5rem 0 0;
+  font-size: 0.86rem;
+}
+
+.app-shell .status-line.ok {
+  color: var(--ok);
+}
+
+.app-shell .status-line.error {
+  color: var(--danger);
+}
+
+.app-shell .citation-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(440px, 100%);
+  height: 100vh;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: white;
+  padding: 1rem;
+  box-shadow: -8px 0 20px rgba(0, 0, 0, 0.08);
+}
+
+.app-shell .citation-drawer pre {
+  background: #f6f8fb;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem;
+  white-space: pre-wrap;
+}
+
+.app-shell .chunk-meta {
+  color: var(--muted);
+  margin-bottom: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .app-shell .composer-row {
+    flex-wrap: wrap;
+  }
+
+  .app-shell .composer-row .btn {
+    flex: 1;
+  }
 }
 
 /* Minimal shared styles for upload page */
