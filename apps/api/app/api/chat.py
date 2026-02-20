@@ -1,13 +1,16 @@
 import json
 import logging
 import os
+from time import perf_counter
 from typing import Any, AsyncGenerator, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Literal
 
+from app.core.observability import get_request_id, reset_request_id, set_request_id
+from app.core.metrics import inc_chat_stream_lifecycle, inc_provider_failure
 from app.providers.factory import get_llm_provider
 from app.providers.llm.openai_llm import OpenAILLM
 from app.providers.llm.ollama_local import OllamaLocal
@@ -97,11 +100,66 @@ async def _stream_llm_answer(
             yield sse("token", {"delta": delta})
 
 
-async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
+def _chat_error_code(exc: Exception, stage: str | None) -> str:
+    message = str(exc).lower()
+    if stage == "generate":
+        return "llm_stream_error"
+    if "embed" in message:
+        return "embeddings_unavailable"
+    if "timeout" in message or "statement_timeout" in message:
+        return "db_timeout"
+    if isinstance(exc, DependencyError):
+        return "dependency_unavailable"
+    return "chat_pipeline_error"
+
+
+def _dependency_from_error_code(error_code: str) -> str:
+    if error_code == "llm_stream_error":
+        return "llm"
+    if error_code == "embeddings_unavailable":
+        return "embeddings"
+    if error_code == "db_timeout":
+        return "db"
+    return "chat"
+
+
+async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, None]:
+    token = set_request_id(request_id)
+    request_started_at = perf_counter()
+    stage_timings_ms: dict[str, int] = {}
+    failed_stage: str | None = None
+    log_ctx: dict[str, Any] = {}
+
+    def _stage_completed(stage: str, started_at: float) -> None:
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        stage_timings_ms[stage] = duration_ms
+        logger.info(
+            "chat_stage_completed",
+            extra={"stage": stage, "duration_ms": duration_ms, **log_ctx},
+        )
+
+    def _stage_failed(stage: str, started_at: float, exc: Exception) -> None:
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        logger.exception(
+            "chat_stage_failed",
+            extra={
+                "stage": stage,
+                "duration_ms": duration_ms,
+                "error_code": _chat_error_code(exc, stage),
+                **log_ctx,
+            },
+        )
+
     try:
+        inc_chat_stream_lifecycle(status="started")
         params = ChatRequest.model_validate(payload)
         llm = _select_llm(params)
         query = _extract_query(llm, params)
+        log_ctx = {
+            "collection_id": params.collection_id,
+            "embeddings_provider": params.embeddings_provider or "hash",
+            "llm_provider": getattr(llm, "name", None),
+        }
 
         if not query:
             yield sse("error", {"message": "No user query found in messages"})
@@ -111,38 +169,97 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
         logger.debug("chat_params", extra={"params": params.model_dump()})
         logger.info(
             "chat_request_received",
-            extra={
-                "collection_id": params.collection_id,
-                "embeddings_provider": params.embeddings_provider or "hash",
-                "llm_provider": getattr(llm, "name", None),
-            },
+            extra=log_ctx,
         )
 
         if params.use_reranking:
-            reformulations = get_reformulations(
-                query, use_reranking=params.use_reranking
-            )
+            stage_started_at = perf_counter()
+            try:
+                reformulations = get_reformulations(
+                    query, use_reranking=params.use_reranking
+                )
+            except Exception as exc:
+                failed_stage = "rerank"
+                _stage_failed("rerank", stage_started_at, exc)
+                raise
+            _stage_completed("rerank", stage_started_at)
             yield sse("reformulations", {"items": reformulations})
 
-        chunks = _retrieve_chunks(params, query)
+        stage_started_at = perf_counter()
+        try:
+            chunks = _retrieve_chunks(params, query)
+        except Exception as exc:
+            failed_stage = "retrieve"
+            _stage_failed("retrieve", stage_started_at, exc)
+            raise
+        _stage_completed("retrieve", stage_started_at)
         logger.info(
             "retrieval_count",
             extra={
                 "count": len(chunks),
-                "collection_id": params.collection_id,
-                "embeddings_provider": params.embeddings_provider or "hash",
-                "llm_provider": getattr(llm, "name", None),
+                **log_ctx,
             },
         )
-        context = build_context(chunks, max_chars=4000)
+
+        stage_started_at = perf_counter()
+        try:
+            context = build_context(chunks, max_chars=4000)
+        except Exception as exc:
+            failed_stage = "build_context"
+            _stage_failed("build_context", stage_started_at, exc)
+            raise
+        _stage_completed("build_context", stage_started_at)
         citations = to_citations(chunks)
 
-        async for chunk in _stream_llm_answer(llm=llm, query=query, context=context):
-            yield chunk
+        stage_started_at = perf_counter()
+        try:
+            async for chunk in _stream_llm_answer(llm=llm, query=query, context=context):
+                yield chunk
+        except Exception as exc:
+            failed_stage = "generate"
+            _stage_failed("generate", stage_started_at, exc)
+            raise
+        _stage_completed("generate", stage_started_at)
 
         yield sse("citations", {"items": citations})
         yield sse("done", {"ok": True})
+        inc_chat_stream_lifecycle(status="completed")
+        logger.info(
+            "chat_pipeline_summary",
+            extra={
+                "status": "ok",
+                "stages_ms": stage_timings_ms,
+                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
+                **log_ctx,
+            },
+        )
     except Exception as e:
+        error_code = _chat_error_code(e, failed_stage)
+        inc_chat_stream_lifecycle(status="failed")
+        inc_provider_failure(
+            dependency=_dependency_from_error_code(error_code),
+            error_code=error_code,
+        )
+        logger.error(
+            "chat_dependency_failure",
+            extra={
+                "stage": failed_stage or "unknown",
+                "error_code": error_code,
+                "error": str(e),
+                **log_ctx,
+            },
+        )
+        logger.info(
+            "chat_pipeline_summary",
+            extra={
+                "status": "error",
+                "failed_stage": failed_stage or "unknown",
+                "error_code": error_code,
+                "stages_ms": stage_timings_ms,
+                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
+                **log_ctx,
+            },
+        )
         if isinstance(e, DependencyError):
             yield sse(
                 "error",
@@ -155,10 +272,12 @@ async def _event_stream(payload: dict) -> AsyncGenerator[str, None]:
         else:
             yield sse("error", {"message": str(e)})
         yield sse("done", {"ok": False})
+    finally:
+        reset_request_id(token)
 
 
 @router.post("/api/chat")
-async def chat(payload: dict):
+async def chat(payload: dict, request: Request):
     """
     Expected paylod:
         {
@@ -174,7 +293,9 @@ async def chat(payload: dict):
     }
 
     return StreamingResponse(
-        _event_stream(payload), headers=headers, media_type="text/event-stream"
+        _event_stream(payload, request_id=get_request_id()),
+        headers=headers,
+        media_type="text/event-stream",
     )
 
 

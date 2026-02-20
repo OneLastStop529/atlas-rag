@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "Atlas Dashboards"
+    orgId: 1
+    folder: "Atlas"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

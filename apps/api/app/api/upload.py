@@ -1,6 +1,7 @@
 from io import BytesIO
 import logging
 import os
+from time import perf_counter
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
@@ -12,6 +13,7 @@ from app.core.reliability import (
     DependencyError,
     retry_with_backoff,
 )
+from app.core.metrics import inc_provider_failure, observe_ingestion_throughput
 from app.db import get_conn
 from app.providers.embeddings.base import EmbeddingsProvider
 from app.providers.embeddings.registry import (
@@ -51,6 +53,27 @@ def _coerce_optional_str(value) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _upload_error_code(exc: Exception, stage: str | None) -> str:
+    message = str(exc).lower()
+    if "embed" in message:
+        return "embeddings_unavailable"
+    if "timeout" in message or "statement_timeout" in message:
+        return "db_timeout"
+    if isinstance(exc, DependencyError):
+        return "dependency_unavailable"
+    if stage == "upload_ingest":
+        return "upload_ingest_error"
+    return "upload_pipeline_error"
+
+
+def _dependency_from_error_code(error_code: str) -> str:
+    if error_code == "db_timeout":
+        return "db"
+    if error_code == "embeddings_unavailable":
+        return "embeddings"
+    return "upload"
+
+
 async def extract_text_from_file(file: UploadFile) -> str:
     """Extract text from uploaded file based on MIME type."""
     content = await file.read()
@@ -85,6 +108,9 @@ async def upload_document(
     embeddings_provider: str | None = Form(default=None),
 ):
     """Upload and ingest a document into the vector database."""
+    request_started_at = perf_counter()
+    stage_timings_ms: dict[str, int] = {}
+    failed_stage: str | None = None
 
     # Validate file type
     if file.content_type not in SUPPORTED_MIME_TYPES:
@@ -138,9 +164,41 @@ async def upload_document(
             {"overlap_chars": "overlap_chars must be less than chunk_chars"},
         )
 
+    log_ctx = {
+        "collection_id": collection,
+        "embeddings_provider": resolved_embeddings_provider,
+    }
+
+    def _stage_completed(stage: str, started_at: float) -> None:
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        stage_timings_ms[stage] = duration_ms
+        logger.info(
+            "upload_stage_completed",
+            extra={"stage": stage, "duration_ms": duration_ms, **log_ctx},
+        )
+
+    def _stage_failed(stage: str, started_at: float, exc: Exception) -> None:
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        logger.exception(
+            "upload_stage_failed",
+            extra={
+                "stage": stage,
+                "duration_ms": duration_ms,
+                "error_code": _upload_error_code(exc, stage),
+                **log_ctx,
+            },
+        )
+
     try:
         # Extract text from file
-        text = await extract_text_from_file(file)
+        stage_started_at = perf_counter()
+        try:
+            text = await extract_text_from_file(file)
+        except Exception as exc:
+            failed_stage = "extract_text"
+            _stage_failed("extract_text", stage_started_at, exc)
+            raise
+        _stage_completed("extract_text", stage_started_at)
 
         if not text.strip():
             return validation_error(
@@ -149,8 +207,15 @@ async def upload_document(
             )
 
         # Configure chunking
-        cfg = ChunkConfig(chunk_chars=chunk_chars, overlap_chars=overlap_chars)
-        chunks = lc_recursive_ch_text(text, cfg)
+        stage_started_at = perf_counter()
+        try:
+            cfg = ChunkConfig(chunk_chars=chunk_chars, overlap_chars=overlap_chars)
+            chunks = lc_recursive_ch_text(text, cfg)
+        except Exception as exc:
+            failed_stage = "chunk"
+            _stage_failed("chunk", stage_started_at, exc)
+            raise
+        _stage_completed("chunk", stage_started_at)
 
         if not chunks:
             return validation_error(
@@ -166,25 +231,37 @@ async def upload_document(
                     cur.execute("SET LOCAL statement_timeout = %s", (statement_timeout_ms,))
                     return get_db_vector_dim(cur)
 
-        dim = retry_with_backoff(_resolve_vector_dim, operation="upload_vector_dim")
+        stage_started_at = perf_counter()
+        try:
+            dim = retry_with_backoff(_resolve_vector_dim, operation="upload_vector_dim")
+        except Exception as exc:
+            failed_stage = "vector_dim"
+            _stage_failed("vector_dim", stage_started_at, exc)
+            raise
+        _stage_completed("vector_dim", stage_started_at)
 
-        # Generate embeddings
-        embeddings_impl = EmbeddingsProvider(
-            dim=dim, provider=resolved_embeddings_provider
-        )
-        embeddings_list = embeddings_impl.embed_documents(chunks)
+        stage_started_at = perf_counter()
+        try:
+            embeddings_impl = EmbeddingsProvider(
+                dim=dim, provider=resolved_embeddings_provider
+            )
+            embeddings_list = embeddings_impl.embed_documents(chunks)
 
-        # Store document and chunks
-        doc_id, num_chunks = retry_with_backoff(
-            lambda: insert_document_and_chunks(
-                collection_id=collection,
-                file_name=file.filename,
-                mime_type=file.content_type,
-                chunks=chunks,
-                embeddings=embeddings_list,
-            ),
-            operation="upload_insert_chunks",
-        )
+            doc_id, num_chunks = retry_with_backoff(
+                lambda: insert_document_and_chunks(
+                    collection_id=collection,
+                    file_name=file.filename,
+                    mime_type=file.content_type,
+                    chunks=chunks,
+                    embeddings=embeddings_list,
+                ),
+                operation="upload_insert_chunks",
+            )
+        except Exception as exc:
+            failed_stage = "upload_ingest"
+            _stage_failed("upload_ingest", stage_started_at, exc)
+            raise
+        _stage_completed("upload_ingest", stage_started_at)
 
         payload = {
             "ok": True,
@@ -207,6 +284,17 @@ async def upload_document(
                 "chunk_count": num_chunks,
             },
         )
+        logger.info(
+            "upload_pipeline_summary",
+            extra={
+                "status": "ok",
+                "stages_ms": stage_timings_ms,
+                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
+                "chunk_count": num_chunks,
+                **log_ctx,
+            },
+        )
+        observe_ingestion_throughput(files=1, chunks=num_chunks)
         return payload
 
     except HTTPException as e:
@@ -215,9 +303,59 @@ async def upload_document(
             return validation_error(detail, {"file": detail})
         raise
     except DependencyError as e:
+        error_code = _upload_error_code(e, failed_stage)
+        inc_provider_failure(
+            dependency=_dependency_from_error_code(error_code),
+            error_code=error_code,
+        )
+        logger.error(
+            "upload_dependency_failure",
+            extra={
+                "stage": failed_stage or "unknown",
+                "error_code": error_code,
+                "error": str(e),
+                **log_ctx,
+            },
+        )
+        logger.info(
+            "upload_pipeline_summary",
+            extra={
+                "status": "error",
+                "failed_stage": failed_stage or "unknown",
+                "error_code": error_code,
+                "stages_ms": stage_timings_ms,
+                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
+                **log_ctx,
+            },
+        )
         raise HTTPException(
             status_code=503,
             detail=f"Dependency unavailable (retryable={e.retryable}): {e}",
         )
     except Exception as e:
+        error_code = _upload_error_code(e, failed_stage)
+        inc_provider_failure(
+            dependency=_dependency_from_error_code(error_code),
+            error_code=error_code,
+        )
+        logger.error(
+            "upload_dependency_failure",
+            extra={
+                "stage": failed_stage or "unknown",
+                "error_code": error_code,
+                "error": str(e),
+                **log_ctx,
+            },
+        )
+        logger.info(
+            "upload_pipeline_summary",
+            extra={
+                "status": "error",
+                "failed_stage": failed_stage or "unknown",
+                "error_code": error_code,
+                "stages_ms": stage_timings_ms,
+                "total_latency_ms": int((perf_counter() - request_started_at) * 1000),
+                **log_ctx,
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

@@ -3,7 +3,7 @@ from time import perf_counter
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.chat import router as chat_router
@@ -22,6 +22,7 @@ from .core.observability import (
     reset_request_id,
     set_request_id,
 )
+from .core.metrics import observe_http_request, render_prometheus_text
 from .providers.factory import get_llm_provider
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,12 @@ async def request_observability_middleware(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         latency_ms = int((perf_counter() - start) * 1000)
+        observe_http_request(
+            route=path,
+            method=request.method,
+            status_code=500,
+            latency_ms=latency_ms,
+        )
         logger.exception(
             "request_failed",
             extra={
@@ -79,6 +86,12 @@ async def request_observability_middleware(request: Request, call_next):
     else:
         response.headers["X-Request-ID"] = request_id
         latency_ms = int((perf_counter() - start) * 1000)
+        observe_http_request(
+            route=path,
+            method=request.method,
+            status_code=response.status_code,
+            latency_ms=latency_ms,
+        )
         logger.info(
             "request_completed",
             extra={
@@ -110,6 +123,14 @@ def readiness_check():
     if payload["status"] != "ok":
         return JSONResponse(status_code=503, content=payload)
     return payload
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(
+        content=render_prometheus_text(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 app.include_router(chat_router)
