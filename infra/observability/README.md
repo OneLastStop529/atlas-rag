@@ -18,3 +18,7 @@ docker compose up -d
 - Grafana provisions:
   - Prometheus datasource
   - `Atlas API Overview` dashboard
+- Prometheus alert rules are loaded from `prometheus/alerts.yml`:
+  - API error rate > 5% for 5m
+  - Chat p95 latency > 3s for 10m
+  - Readiness failures sustained for 2m

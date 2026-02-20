@@ -166,13 +166,19 @@ Acceptance
 - Latency and error SLO indicators are visible for chat and upload APIs.
 - A smoke check confirms request correlation + metric updates for both happy and degraded paths.
 
-Status: ⏳ Planned
+Status: 🚧 In Progress
 Next execution order:
 1) Logging foundation + request IDs
 2) Stage instrumentation (chat + upload)
 3) Metrics endpoint and counters/histograms
 4) Dashboard + alert rules
 5) Tests and smoke verification
+Progress notes:
+- ✅ Step 1 complete: request correlation middleware + structured JSON logs.
+- ✅ Step 2 complete: stage-level timing/failure logs and per-pipeline summaries.
+- ✅ Step 3 complete: `/metrics` endpoint, request/error/latency counters, SSE lifecycle metrics.
+- ✅ Step 4 complete: Grafana + Prometheus OSS scaffold, dashboard, and alert rules.
+- ✅ Step 5 implementation added: request-ID + metrics regression tests and observability smoke script.
 
 ### 5.3: Advanced retrieval rollout (third, behind flags)
 - Add feature-flagged advanced retrieval options (hybrid retrieval, reranker variants, query rewriting policy).

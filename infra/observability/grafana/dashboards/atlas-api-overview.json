@@ -41,7 +41,6 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": [],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -73,7 +72,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "s"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -86,7 +85,6 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": [],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -99,20 +97,99 @@
       "targets": [
         {
           "editorMode": "code",
+          "expr": "sum(rate(atlas_http_requests_total{route=\"/api/chat\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(atlas_http_requests_total{route=\"/api/chat\"}[5m])), 0.001)",
+          "legendFormat": "chat error rate",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(atlas_http_requests_total{route=\"/upload\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(atlas_http_requests_total{route=\"/upload\"}[5m])), 0.001)",
+          "legendFormat": "upload error rate",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Error Rate (5xx)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(atlas_http_request_latency_seconds_bucket{route=\"/api/chat\"}[5m])) by (le))",
+          "legendFormat": "chat p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(atlas_http_request_latency_seconds_bucket{route=\"/api/chat\"}[5m])) by (le))",
           "legendFormat": "chat p95",
           "range": true,
-          "refId": "A"
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(atlas_http_request_latency_seconds_bucket{route=\"/api/chat\"}[5m])) by (le))",
+          "legendFormat": "chat p99",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(atlas_http_request_latency_seconds_bucket{route=\"/upload\"}[5m])) by (le))",
+          "legendFormat": "upload p50",
+          "range": true,
+          "refId": "D"
         },
         {
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(atlas_http_request_latency_seconds_bucket{route=\"/upload\"}[5m])) by (le))",
           "legendFormat": "upload p95",
           "range": true,
-          "refId": "B"
+          "refId": "E"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(atlas_http_request_latency_seconds_bucket{route=\"/upload\"}[5m])) by (le))",
+          "legendFormat": "upload p99",
+          "range": true,
+          "refId": "F"
         }
       ],
-      "title": "P95 Latency",
+      "title": "Latency Quantiles",
       "type": "timeseries"
     },
     {
@@ -130,15 +207,14 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
+        "h": 10,
+        "w": 8,
+        "x": 16,
         "y": 8
       },
-      "id": 3,
+      "id": 4,
       "options": {
         "legend": {
-          "calcs": [],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -168,9 +244,53 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "increase(atlas_http_requests_total{route=\"/health/ready\",status=\"503\"}[5m])",
+          "legendFormat": "readiness 503 (5m increase)",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Readiness Failures",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -179,8 +299,7 @@
                 "value": null
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
@@ -188,9 +307,9 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 8
+        "y": 18
       },
-      "id": 4,
+      "id": 6,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -225,7 +344,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -234,8 +353,7 @@
                 "value": null
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
@@ -243,9 +361,9 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 8
+        "y": 18
       },
-      "id": 5,
+      "id": 7,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -290,5 +408,5 @@
   "timezone": "browser",
   "title": "Atlas API Overview",
   "uid": "atlas-api-overview",
-  "version": 1
+  "version": 2
 }

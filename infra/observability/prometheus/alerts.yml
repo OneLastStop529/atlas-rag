@@ -1,0 +1,41 @@
+groups:
+  - name: atlas-api-alerts
+    rules:
+      - alert: AtlasApiHighErrorRate
+        expr: |
+          (
+            sum(rate(atlas_http_requests_total{route=~"/api/chat|/upload",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(atlas_http_requests_total{route=~"/api/chat|/upload"}[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: atlas-api
+        annotations:
+          summary: "Atlas API error rate is above 5%"
+          description: "Error rate for /api/chat or /upload has been above 5% for 5 minutes."
+
+      - alert: AtlasChatP95HighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(atlas_http_request_latency_seconds_bucket{route="/api/chat"}[5m])) by (le)
+          ) > 3
+        for: 10m
+        labels:
+          severity: warning
+          service: atlas-api
+        annotations:
+          summary: "Atlas chat p95 latency is above 3s"
+          description: "Chat p95 latency has been above 3 seconds for 10 minutes."
+
+      - alert: AtlasReadinessFailing
+        expr: increase(atlas_http_requests_total{route="/health/ready",status="503"}[2m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: atlas-api
+        annotations:
+          summary: "Atlas readiness endpoint is failing"
+          description: "Readiness endpoint has returned 503 responses over the last 2 minutes."
