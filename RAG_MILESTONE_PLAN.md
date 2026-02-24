@@ -189,15 +189,32 @@ Acceptance
 - Advanced retrieval can be toggled safely without deploy rollback.
 - Evaluation reports show quality delta and latency/cost impact before broad rollout.
 
-Status: ⏳ Planned
+Status: ✅ Complete (2026-02-24)
 
 5.3 Closeout Checklist
-- [ ] Aggregate `retrieval_shadow_eval` into a report/dashboard (quality overlap, latency deltas, sample size).
-- [ ] Add per-request cost proxies to shadow eval output and baseline vs advanced cost deltas.
-- [ ] Define environment defaults (`dev`, `staging`, `prod`) for rollout/eval flags and document promotion gates.
-- [ ] Smoke-test advanced retrieval toggle safety (off/on) without deploy rollback.
-- [ ] Run E2E scenarios for baseline-only, sampled shadow eval, and rollout at 0%/partial/100%.
-- [ ] Attach closeout evidence (test results, smoke commands, dashboard/report links) and mark 5.3 complete.
+- [x] Aggregate `retrieval_shadow_eval` into a report/dashboard (quality overlap, latency deltas, sample size).
+- [x] Add per-request cost proxies to shadow eval output and baseline vs advanced cost deltas.
+- [x] Define environment defaults (`dev`, `staging`, `prod`) for rollout/eval flags and document promotion gates.
+- [x] Smoke-test advanced retrieval toggle safety (off/on) without deploy rollback.
+- [x] Run E2E scenarios for baseline-only, sampled shadow eval, and rollout at 0%/partial/100%.
+- [x] Attach closeout evidence (test results, smoke commands, dashboard/report links) and mark 5.3 complete.
+
+5.3 Closeout Evidence (2026-02-24)
+- Dashboard: `infra/observability/grafana/dashboards/atlas-api-overview.json` includes:
+  - `Shadow Eval Sample Volume`
+  - `Shadow Eval Status Split`
+  - `Shadow Eval Jaccard Trend`
+  - `Shadow Eval Latency Delta (ms)`
+  - `Shadow Eval Context Token Delta`
+- Metrics wiring:
+  - `apps/api/app/core/metrics.py` (`observe_retrieval_shadow_eval` + Prometheus series)
+  - `apps/api/app/api/chat.py` (`_emit_retrieval_shadow_eval` includes latency + token proxy deltas)
+- Smoke/E2E command:
+  - `cd apps/api && PYTHONPATH=. .venv/bin/python scripts/retrieval_rollout_smoke.py`
+  - Result: baseline-only, sampled shadow eval, and rollout 0%/50%/100% scenarios passed; toggle off/on passed in-process without deploy rollback.
+- Test evidence:
+  - `cd apps/api && .venv/bin/python -m pytest -q tests`
+  - Result: `23 passed`.
 
 ### 5.4: Infra deployment hardening (fourth)
 - Standardize deployment checks: readiness/liveness probes, startup sequencing, and config validation.

@@ -85,6 +85,31 @@ POST /api/llm/test
 body: { "provider": "ollama|openai", "model": "...", "base_url": "..." }
 ```
 
+### Advanced retrieval rollout flags (Milestone 5.3)
+`/api/chat` supports advanced retrieval rollout + sampled shadow eval via env vars:
+
+```
+ADV_RETRIEVAL_ENABLED=false
+ADV_RETRIEVAL_ALLOW_REQUEST_OVERRIDE=false
+RETRIEVAL_STRATEGY=baseline               # baseline|advanced_hybrid|advanced_hybrid_rerank
+RERANKER_VARIANT=rrf_simple               # rrf_simple|cross_encoder
+QUERY_REWRITE_POLICY=disabled             # disabled|simple|llm
+ADV_RETRIEVAL_ROLLOUT_PERCENT=0           # 0-100
+ADV_RETRIEVAL_EVAL_MODE=off               # off|shadow
+ADV_RETRIEVAL_EVAL_SAMPLE_PERCENT=0       # 0-100
+ADV_RETRIEVAL_EVAL_TIMEOUT_MS=2000        # 250-30000
+```
+
+Recommended defaults by environment:
+- `dev`: `ADV_RETRIEVAL_ENABLED=true`, `RETRIEVAL_STRATEGY=advanced_hybrid`, `ADV_RETRIEVAL_ROLLOUT_PERCENT=100`, `ADV_RETRIEVAL_EVAL_MODE=shadow`, `ADV_RETRIEVAL_EVAL_SAMPLE_PERCENT=100`
+- `staging`: same as `dev`
+- `prod`: `ADV_RETRIEVAL_ENABLED=true`, `RETRIEVAL_STRATEGY=advanced_hybrid`, `ADV_RETRIEVAL_ROLLOUT_PERCENT=0`, `ADV_RETRIEVAL_EVAL_MODE=shadow`, `ADV_RETRIEVAL_EVAL_SAMPLE_PERCENT=5`
+
+Promotion gates (before increasing prod rollout):
+- quality: top-1 source agreement rate >= `0.70` and jaccard median >= `0.50`
+- latency: shadow-primary p95 delta <= `+500ms`
+- reliability: no sustained error-rate regression (> `1%` absolute increase) during eval window
+
 ### 3) Run the frontend (Next.js)
 The frontend expects the API base URL via `NEXT_PUBLIC_API_URL` and defaults to
 `http://localhost:8000` if unset.

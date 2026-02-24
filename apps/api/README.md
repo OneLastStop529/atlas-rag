@@ -13,3 +13,25 @@
 ## Health Endpoints
 - `GET /health` and `GET /health/live`: liveness.
 - `GET /health/ready`: dependency readiness (DB, pgvector, embeddings provider). Returns `503` when degraded.
+
+## Advanced Retrieval Rollout (5.3)
+### Flags
+- `ADV_RETRIEVAL_ENABLED` (default: `false`)
+- `ADV_RETRIEVAL_ALLOW_REQUEST_OVERRIDE` (default: `false`)
+- `RETRIEVAL_STRATEGY` (default: `baseline`, allowed: `baseline|advanced_hybrid|advanced_hybrid_rerank`)
+- `RERANKER_VARIANT` (default: `rrf_simple`, allowed: `rrf_simple|cross_encoder`)
+- `QUERY_REWRITE_POLICY` (default: `disabled`, allowed: `disabled|simple|llm`)
+- `ADV_RETRIEVAL_ROLLOUT_PERCENT` (default: `0`)
+- `ADV_RETRIEVAL_EVAL_MODE` (default: `off`, allowed: `off|shadow`)
+- `ADV_RETRIEVAL_EVAL_SAMPLE_PERCENT` (default: `0`)
+- `ADV_RETRIEVAL_EVAL_TIMEOUT_MS` (default: `2000`)
+
+### Environment defaults
+- `dev`: rollout 100%, shadow eval 100%
+- `staging`: rollout 100%, shadow eval 100%
+- `prod`: rollout 0%, shadow eval 5%
+
+### Promotion gates
+- quality: top-1 agreement >= `0.70` and jaccard median >= `0.50`
+- latency: shadow-primary p95 delta <= `+500ms`
+- reliability: no sustained error-rate regression (> `1%` absolute)

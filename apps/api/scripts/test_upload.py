@@ -59,7 +59,7 @@ def test_chunking():
         for i, chunk in enumerate(chunks[:3]):  # Show first 3 chunks
             print(f"Chunk {i + 1}: {len(chunk)} chars - {chunk[:100]}...")
 
-        return chunks
+        assert len(chunks) > 0, "No chunks generated"
 
     except ImportError as e:
         print(f"Import error (expected if dependencies not installed): {e}")
@@ -82,7 +82,7 @@ def test_embeddings():
         )
         print(f"First embedding sample: {embeddings[0][:5]}...")  # Show first 5 values
 
-        return embeddings
+        assert len(embeddings) == len(test_chunks), "Embeddings count mismatch"
 
     except ImportError as e:
         print(f"Import error (expected if dependencies not installed): {e}")

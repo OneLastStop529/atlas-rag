@@ -13,7 +13,11 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 from app.core.observability import get_request_id, reset_request_id, set_request_id
-from app.core.metrics import inc_chat_stream_lifecycle, inc_provider_failure
+from app.core.metrics import (
+    inc_chat_stream_lifecycle,
+    inc_provider_failure,
+    observe_retrieval_shadow_eval,
+)
 from app.core.retrieval_flags import resolve_advanced_retrieval_config
 from app.providers.factory import get_llm_provider
 from app.providers.llm.openai_llm import OpenAILLM
@@ -30,6 +34,7 @@ from app.rag.retrieval_strategy import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+CHAT_CONTEXT_MAX_CHARS = 4000
 
 
 def sse(event: str, data: dict) -> str:
@@ -318,6 +323,10 @@ def _emit_retrieval_shadow_eval(
     shared_ids = len(primary_ids & shadow_ids)
     union_ids = len(primary_ids | shadow_ids)
     jaccard = (shared_ids / union_ids) if union_ids else 0.0
+    primary_context_chars, primary_context_chunks = _estimate_context_proxy(primary_chunks)
+    shadow_context_chars, shadow_context_chunks = _estimate_context_proxy(shadow_chunks)
+    primary_context_token_proxy = _chars_to_token_proxy(primary_context_chars)
+    shadow_context_token_proxy = _chars_to_token_proxy(shadow_context_chars)
 
     logger.info(
         "retrieval_shadow_eval",
@@ -333,10 +342,29 @@ def _emit_retrieval_shadow_eval(
             "jaccard": round(jaccard, 4),
             "primary_latency_ms": primary_latency_ms,
             "shadow_latency_ms": shadow_latency_ms,
+            "latency_delta_ms": shadow_latency_ms - primary_latency_ms,
             "top1_source_same": _top1_source_same(primary_chunks, shadow_chunks),
+            "primary_context_chars": primary_context_chars,
+            "shadow_context_chars": shadow_context_chars,
+            "context_chars_delta": shadow_context_chars - primary_context_chars,
+            "primary_context_token_proxy": primary_context_token_proxy,
+            "shadow_context_token_proxy": shadow_context_token_proxy,
+            "context_token_proxy_delta": shadow_context_token_proxy - primary_context_token_proxy,
+            "primary_context_chunks": primary_context_chunks,
+            "shadow_context_chunks": shadow_context_chunks,
+            "context_chunks_delta": shadow_context_chunks - primary_context_chunks,
             "shadow_error": shadow_error,
             **log_ctx,
         },
+    )
+    observe_retrieval_shadow_eval(
+        status=status,
+        primary_strategy=primary_plan.retrieval_strategy,
+        shadow_strategy=shadow_plan.retrieval_strategy,
+        jaccard=jaccard,
+        latency_delta_ms=shadow_latency_ms - primary_latency_ms,
+        context_token_delta=shadow_context_token_proxy - primary_context_token_proxy,
+        top1_source_same=_top1_source_same(primary_chunks, shadow_chunks),
     )
 
 
@@ -354,6 +382,24 @@ def _top1_source_same(
     if not primary_chunks or not shadow_chunks:
         return False
     return primary_chunks[0].source == shadow_chunks[0].source
+
+
+def _estimate_context_proxy(chunks: list[RetrievedChunk]) -> tuple[int, int]:
+    used_chars = 0
+    included_chunks = 0
+    for chunk in chunks:
+        header = f"[Source: {chunk.source} | Chunk: {chunk.chunk_index}]\n"
+        block = header + chunk.content.strip()
+        if used_chars + len(block) + 2 > CHAT_CONTEXT_MAX_CHARS:
+            break
+        used_chars += len(block) + 2
+        included_chunks += 1
+    return used_chars, included_chunks
+
+
+def _chars_to_token_proxy(char_count: int) -> int:
+    # Lightweight proxy for prompt-token cost comparisons in shadow eval reports.
+    return max(0, (char_count + 3) // 4)
 
 
 async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, None]:
@@ -447,7 +493,7 @@ async def _event_stream(payload: dict, request_id: str) -> AsyncGenerator[str, N
             log_ctx=log_ctx,
             failed_stage_ref=failed_stage_ref,
         ):
-            context = build_context(chunks, max_chars=4000)
+            context = build_context(chunks, max_chars=CHAT_CONTEXT_MAX_CHARS)
         citations = to_citations(chunks)
 
         with _run_stage(
