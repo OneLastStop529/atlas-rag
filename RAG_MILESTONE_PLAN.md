@@ -166,7 +166,7 @@ Acceptance
 - Latency and error SLO indicators are visible for chat and upload APIs.
 - A smoke check confirms request correlation + metric updates for both happy and degraded paths.
 
-Status: 🚧 In Progress
+Status: ✅ Complete (2026-02-24)
 Next execution order:
 1) Logging foundation + request IDs
 2) Stage instrumentation (chat + upload)
@@ -179,6 +179,8 @@ Progress notes:
 - ✅ Step 3 complete: `/metrics` endpoint, request/error/latency counters, SSE lifecycle metrics.
 - ✅ Step 4 complete: Grafana + Prometheus OSS scaffold, dashboard, and alert rules.
 - ✅ Step 5 implementation added: request-ID + metrics regression tests and observability smoke script.
+Closeout evidence (2026-02-24):
+- Tests: `cd apps/api && .venv/bin/python -m pytest -q tests` -> `26 passed`.
 
 ### 5.3: Advanced retrieval rollout (third, behind flags)
 - Add feature-flagged advanced retrieval options (hybrid retrieval, reranker variants, query rewriting policy).
@@ -214,7 +216,7 @@ Status: ✅ Complete (2026-02-24)
   - Result: baseline-only, sampled shadow eval, and rollout 0%/50%/100% scenarios passed; toggle off/on passed in-process without deploy rollback.
 - Test evidence:
   - `cd apps/api && .venv/bin/python -m pytest -q tests`
-  - Result: `23 passed`.
+  - Result: `26 passed`.
 
 ### 5.4: Infra deployment hardening (fourth)
 - Standardize deployment checks: readiness/liveness probes, startup sequencing, and config validation.

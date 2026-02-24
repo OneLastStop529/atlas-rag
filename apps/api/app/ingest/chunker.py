@@ -12,11 +12,47 @@ class ChunkConfig:
     overlap_chars: int = 100
 
 
+def normalize_text_for_chunking(text: str) -> str:
+    """Normalize extraction artifacts before chunking."""
+    if not text:
+        return ""
+
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Normalize Unicode spacing artifacts often found in PDFs.
+    normalized = (
+        normalized.replace("\u00A0", " ")
+        .replace("\u2007", " ")
+        .replace("\u202F", " ")
+    )
+    normalized = re.sub(r"[\u200B-\u200D\uFEFF]", "", normalized)
+
+    # Soft hyphen is a discretionary hyphen and should not survive into chunks.
+    normalized = normalized.replace("\u00AD", "")
+
+    # Join words broken by line-wrap hyphenation (e.g. "inter-\nnational").
+    normalized = re.sub(
+        r"(?<=[A-Za-z0-9])-\s*\n\s*(?=[A-Za-z0-9])",
+        "",
+        normalized,
+    )
+
+    # Collapse noisy spacing while preserving paragraph/newline boundaries.
+    normalized = re.sub(r"[ \t\f\v]+", " ", normalized)
+    normalized = re.sub(r" *\n *", "\n", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
+
+
 def lc_recursive_ch_text(text: str, cfg: ChunkConfig):
     """
     Uses langchain's RecursiveCharacterTextSplitter to split text into chunks.
     This is more sophisticated than our simple chunking and can split on newlines, spaces, etc.
     """
+    text = normalize_text_for_chunking(text)
+    if not text:
+        return []
+
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=cfg.chunk_chars,
         chunk_overlap=cfg.overlap_chars,
@@ -30,8 +66,7 @@ def chunk_text(text: str, cfg: ChunkConfig) -> List[str]:
     Simple, robust text chunking based on character count with overlap.
     Good enough for v0 ingestion
     """
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    text = normalize_text_for_chunking(text)
 
     if not text:
         return []

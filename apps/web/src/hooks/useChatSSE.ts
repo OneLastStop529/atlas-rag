@@ -22,6 +22,13 @@ export interface UseChatSSEOptions {
   k?: number;
   embeddingsProvider?: EmbeddingsProviderId;
   useReranking?: boolean;
+  advRetrievalEnabled?: boolean;
+  retrievalStrategy?: string;
+  rerankerVariant?: string;
+  queryRewritePolicy?: string;
+  advRetrievalEvalMode?: string;
+  advRetrievalEvalSamplePercent?: number;
+  advRetrievalEvalTimeoutMs?: number;
   llmProvider?: string;
   llmModel?: string;
   llmBaseUrl?: string;
@@ -46,6 +53,13 @@ export function useChatSSE({
   k,
   embeddingsProvider,
   useReranking,
+  advRetrievalEnabled,
+  retrievalStrategy,
+  rerankerVariant,
+  queryRewritePolicy,
+  advRetrievalEvalMode,
+  advRetrievalEvalSamplePercent,
+  advRetrievalEvalTimeoutMs,
   llmProvider,
   llmModel,
   llmBaseUrl,
@@ -88,6 +102,13 @@ export function useChatSSE({
           k,
           embeddings_provider: embeddingsProvider,
           use_reranking: useReranking,
+          adv_retrieval_enabled: advRetrievalEnabled,
+          retrieval_strategy: retrievalStrategy,
+          reranker_variant: rerankerVariant,
+          query_rewrite_policy: queryRewritePolicy,
+          adv_retrieval_eval_mode: advRetrievalEvalMode,
+          adv_retrieval_eval_sample_percent: advRetrievalEvalSamplePercent,
+          adv_retrieval_eval_timeout_ms: advRetrievalEvalTimeoutMs,
           llm_provider: llmProvider,
           llm_model: llmModel,
           llm_base_url: llmBaseUrl,
@@ -106,11 +127,11 @@ export function useChatSSE({
             case "token":
               const tokenData = data as { delta?: string };
               if (typeof tokenData.delta === 'string') {
+                const delta = tokenData.delta;
                 setMessages((msgs) => {
                   const lastIdx = msgs.length - 1;
                   const last = msgs[lastIdx];
                   if (!last || last.role !== "assistant") return msgs;
-                  const delta = tokenData.delta;
                   const needsSpace =
                     last.content.length > 0 &&
                     !/\s$/.test(last.content) &&
@@ -122,7 +143,7 @@ export function useChatSSE({
                   };
                   return [...msgs.slice(0, lastIdx), updated];
                 });
-                onToken?.(tokenData.delta);
+                onToken?.(delta);
               }
               break;
 
@@ -167,6 +188,13 @@ export function useChatSSE({
     k,
     embeddingsProvider,
     useReranking,
+    advRetrievalEnabled,
+    retrievalStrategy,
+    rerankerVariant,
+    queryRewritePolicy,
+    advRetrievalEvalMode,
+    advRetrievalEvalSamplePercent,
+    advRetrievalEvalTimeoutMs,
     llmProvider,
     llmModel,
     llmBaseUrl,

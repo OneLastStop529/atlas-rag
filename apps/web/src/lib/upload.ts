@@ -30,7 +30,7 @@ export async function uploadFile(args: UploadArgs): Promise<UploadResponse> {
   fd.append('embeddings_provider', args.embeddingsProvider ?? 'sentence-transformers');
 
   const url = `${API_BASE_URL}/upload`;
-  
+
   const response = await fetch(url, {
     method: 'POST',
     body: fd,
@@ -56,4 +56,3 @@ export async function uploadFile(args: UploadArgs): Promise<UploadResponse> {
 }
 
 // Re-export types for convenience
-export type { UploadArgs, UploadResponse } from "./api";

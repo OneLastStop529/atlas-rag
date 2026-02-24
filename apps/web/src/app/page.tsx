@@ -25,7 +25,14 @@ export default function Page() {
   const [llmModel, setLlmModel] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [topK, setTopK] = useState(5);
-  const [advancedRetrieval, setAdvancedRetrieval] = useState(false);
+  const [useReranking, setUseReranking] = useState(false);
+  const [advRetrievalEnabled, setAdvRetrievalEnabled] = useState(false);
+  const [retrievalStrategy, setRetrievalStrategy] = useState("baseline");
+  const [rerankerVariant, setRerankerVariant] = useState("rrf_simple");
+  const [queryRewritePolicy, setQueryRewritePolicy] = useState("disabled");
+  const [advRetrievalEvalMode, setAdvRetrievalEvalMode] = useState("off");
+  const [advRetrievalEvalSamplePercent, setAdvRetrievalEvalSamplePercent] = useState(0);
+  const [advRetrievalEvalTimeoutMs, setAdvRetrievalEvalTimeoutMs] = useState(2000);
   const [embeddingsProvider, setEmbeddingsProvider] =
     useState<EmbeddingsProviderId>("sentence-transformers");
   const [testingLlm, setTestingLlm] = useState(false);
@@ -53,7 +60,14 @@ export default function Page() {
     collectionId: "default",
     k: topK,
     embeddingsProvider,
-    useReranking: advancedRetrieval,
+    useReranking,
+    advRetrievalEnabled,
+    retrievalStrategy,
+    rerankerVariant,
+    queryRewritePolicy,
+    advRetrievalEvalMode,
+    advRetrievalEvalSamplePercent,
+    advRetrievalEvalTimeoutMs,
     llmProvider,
     llmModel: llmModel || undefined,
     llmBaseUrl: llmBaseUrl || undefined,
@@ -66,6 +80,14 @@ export default function Page() {
     const storedModel = window.localStorage.getItem("llm.model");
     const storedBaseUrl = window.localStorage.getItem("llm.baseUrl");
     const storedTopK = window.localStorage.getItem("rag.topK");
+    const storedUseReranking = window.localStorage.getItem("rag.useReranking");
+    const storedAdvRetrievalEnabled = window.localStorage.getItem("rag.advRetrievalEnabled");
+    const storedRetrievalStrategy = window.localStorage.getItem("rag.retrievalStrategy");
+    const storedRerankerVariant = window.localStorage.getItem("rag.rerankerVariant");
+    const storedQueryRewritePolicy = window.localStorage.getItem("rag.queryRewritePolicy");
+    const storedEvalMode = window.localStorage.getItem("rag.evalMode");
+    const storedEvalSample = window.localStorage.getItem("rag.evalSamplePercent");
+    const storedEvalTimeout = window.localStorage.getItem("rag.evalTimeoutMs");
     const storedEmbeddingsProvider = window.localStorage.getItem(
       "rag.embeddingsProvider"
     );
@@ -75,6 +97,22 @@ export default function Page() {
     if (storedModel) setLlmModel(storedModel);
     if (storedBaseUrl) setLlmBaseUrl(storedBaseUrl);
     if (storedTopK) setTopK(Number(storedTopK) || 5);
+    if (storedUseReranking) setUseReranking(storedUseReranking === "true");
+    if (storedAdvRetrievalEnabled) setAdvRetrievalEnabled(storedAdvRetrievalEnabled === "true");
+    if (storedRetrievalStrategy) setRetrievalStrategy(storedRetrievalStrategy);
+    if (storedRerankerVariant) setRerankerVariant(storedRerankerVariant);
+    if (storedQueryRewritePolicy) setQueryRewritePolicy(storedQueryRewritePolicy);
+    if (storedEvalMode) setAdvRetrievalEvalMode(storedEvalMode);
+    if (storedEvalSample) {
+      setAdvRetrievalEvalSamplePercent(
+        Math.max(0, Math.min(100, Number(storedEvalSample) || 0))
+      );
+    }
+    if (storedEvalTimeout) {
+      setAdvRetrievalEvalTimeoutMs(
+        Math.max(250, Math.min(30000, Number(storedEvalTimeout) || 2000))
+      );
+    }
     if (storedEmbeddingsProvider) {
       setEmbeddingsProvider(storedEmbeddingsProvider as EmbeddingsProviderId);
     }
@@ -94,8 +132,30 @@ export default function Page() {
     window.localStorage.setItem("llm.model", llmModel);
     window.localStorage.setItem("llm.baseUrl", llmBaseUrl);
     window.localStorage.setItem("rag.topK", String(topK));
+    window.localStorage.setItem("rag.useReranking", String(useReranking));
+    window.localStorage.setItem("rag.advRetrievalEnabled", String(advRetrievalEnabled));
+    window.localStorage.setItem("rag.retrievalStrategy", retrievalStrategy);
+    window.localStorage.setItem("rag.rerankerVariant", rerankerVariant);
+    window.localStorage.setItem("rag.queryRewritePolicy", queryRewritePolicy);
+    window.localStorage.setItem("rag.evalMode", advRetrievalEvalMode);
+    window.localStorage.setItem("rag.evalSamplePercent", String(advRetrievalEvalSamplePercent));
+    window.localStorage.setItem("rag.evalTimeoutMs", String(advRetrievalEvalTimeoutMs));
     window.localStorage.setItem("rag.embeddingsProvider", embeddingsProvider);
-  }, [llmProvider, llmModel, llmBaseUrl, topK, embeddingsProvider]);
+  }, [
+    llmProvider,
+    llmModel,
+    llmBaseUrl,
+    topK,
+    useReranking,
+    advRetrievalEnabled,
+    retrievalStrategy,
+    rerankerVariant,
+    queryRewritePolicy,
+    advRetrievalEvalMode,
+    advRetrievalEvalSamplePercent,
+    advRetrievalEvalTimeoutMs,
+    embeddingsProvider,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -258,11 +318,88 @@ export default function Page() {
             <label className="field checkbox-field" title="Coming soon">
               <input
                 type="checkbox"
-                checked={advancedRetrieval}
-                onChange={(e) => setAdvancedRetrieval(e.target.checked)}
-                disabled
+                checked={useReranking}
+                onChange={(e) => setUseReranking(e.target.checked)}
               />
-              <span>Advanced retrieval (coming soon)</span>
+              <span>Use reranking</span>
+            </label>
+            <label className="field checkbox-field">
+              <input
+                type="checkbox"
+                checked={advRetrievalEnabled}
+                onChange={(e) => setAdvRetrievalEnabled(e.target.checked)}
+              />
+              <span>Enable advanced retrieval</span>
+            </label>
+            <label className="field">
+              <span>Retrieval strategy</span>
+              <select
+                value={retrievalStrategy}
+                onChange={(e) => setRetrievalStrategy(e.target.value)}
+              >
+                <option value="baseline">baseline</option>
+                <option value="advanced_hybrid">advanced_hybrid</option>
+                <option value="advanced_hybrid_rerank">advanced_hybrid_rerank</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Reranker variant</span>
+              <select
+                value={rerankerVariant}
+                onChange={(e) => setRerankerVariant(e.target.value)}
+              >
+                <option value="rrf_simple">rrf_simple</option>
+                <option value="cross_encoder">cross_encoder</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Query rewrite policy</span>
+              <select
+                value={queryRewritePolicy}
+                onChange={(e) => setQueryRewritePolicy(e.target.value)}
+              >
+                <option value="disabled">disabled</option>
+                <option value="simple">simple</option>
+                <option value="llm">llm</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Eval mode</span>
+              <select
+                value={advRetrievalEvalMode}
+                onChange={(e) => setAdvRetrievalEvalMode(e.target.value)}
+              >
+                <option value="off">off</option>
+                <option value="shadow">shadow</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Eval sample %</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={advRetrievalEvalSamplePercent}
+                onChange={(e) =>
+                  setAdvRetrievalEvalSamplePercent(
+                    Math.max(0, Math.min(100, Number(e.target.value) || 0))
+                  )
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Eval timeout ms</span>
+              <input
+                type="number"
+                min={250}
+                max={30000}
+                value={advRetrievalEvalTimeoutMs}
+                onChange={(e) =>
+                  setAdvRetrievalEvalTimeoutMs(
+                    Math.max(250, Math.min(30000, Number(e.target.value) || 2000))
+                  )
+                }
+              />
             </label>
           </div>
         </section>
@@ -314,7 +451,7 @@ export default function Page() {
         </div>
       </section>
 
-      {advancedRetrieval && reformulations.length > 0 && (
+      {reformulations.length > 0 && (
         <section className="panel">
           <h2>Reformulations</h2>
           <ul className="simple-list">

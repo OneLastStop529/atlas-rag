@@ -165,7 +165,6 @@ export async function getDocumentChunks(
 
 // Upload API function (re-exports from upload.ts)
 export { uploadFile } from './upload';
-export type { UploadArgs, UploadResponse } from './upload';
 
 // Health check
 export async function healthCheck(): Promise<{ status: string }> {
