@@ -16,6 +16,7 @@ from app.core.reliability import (
 class EmbeddingsProvider(Embeddings):
     model_name: str
     dim: int | None
+    _impl: Embeddings | None
 
     def __init__(
         self,
@@ -36,13 +37,14 @@ class EmbeddingsProvider(Embeddings):
         self.model_name = self._impl.model_name
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        if self._impl is None:
+        impl = self._impl
+        if impl is None:
             raise NotImplementedError(
                 "embed_documents must be implemented by EmbeddingsProvider subclasses"
             )
         started_at = time.monotonic()
         vectors = retry_with_backoff(
-            lambda: self._impl.embed_documents(texts),
+            lambda: impl.embed_documents(texts),
             operation=f"embed_documents[{self.model_name}]",
         )
         enforce_timeout_budget(
@@ -53,13 +55,14 @@ class EmbeddingsProvider(Embeddings):
         return vectors
 
     def embed_query(self, text: str) -> List[float]:
-        if self._impl is None:
+        impl = self._impl
+        if impl is None:
             raise NotImplementedError(
                 "embed_query must be implemented by EmbeddingsProvider subclasses"
             )
         started_at = time.monotonic()
         vector = retry_with_backoff(
-            lambda: self._impl.embed_query(text),
+            lambda: impl.embed_query(text),
             operation=f"embed_query[{self.model_name}]",
         )
         enforce_timeout_budget(

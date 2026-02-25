@@ -12,9 +12,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 API_DIR = ROOT / "apps" / "api"
 sys.path.insert(0, str(API_DIR))
-from app.providers.embeddings.base import EmbeddingsProvider
 
 file = argv[1] if len(argv) > 1 else str(API_DIR / "data" / "test_document.txt")
+
+
+def _get_embeddings_provider_cls():
+    from app.providers.embeddings.base import EmbeddingsProvider
+
+    return EmbeddingsProvider
 
 
 def _read_text_file(path: str) -> str:
@@ -69,9 +74,10 @@ def test_chunking():
 def test_embeddings():
     """Test the embedding functionality."""
     try:
+        embeddings_provider_cls = _get_embeddings_provider_cls()
         # Test with hash embeddings (doesn't require ML models)
 
-        embeddings_provider = EmbeddingsProvider(
+        embeddings_provider = embeddings_provider_cls(
             dim=384, provider="hash"
         )  # Validate provider choice
         test_chunks = ["This is a test chunk", "Another test chunk"]
