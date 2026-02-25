@@ -1,6 +1,10 @@
 import unittest
 
-from app.ingest.chunker import ChunkConfig, lc_recursive_ch_text, normalize_text_for_chunking
+from app.ingest.chunker import (
+    ChunkConfig,
+    lc_recursive_ch_text,
+    normalize_text_for_chunking,
+)
 
 
 class ChunkerNormalizationTests(unittest.TestCase):
@@ -10,7 +14,7 @@ class ChunkerNormalizationTests(unittest.TestCase):
         self.assertEqual(normalized, "Hyphen and international cooperation")
 
     def test_normalize_cleans_unicode_spacing_and_preserves_paragraph_break(self):
-        raw = "A\u00A0\u202Fword\t\twith spaces\n\n\nNext\u200B line"
+        raw = "A\u00a0\u202fword\t\twith spaces\n\n\nNext\u200b line"
         normalized = normalize_text_for_chunking(raw)
         self.assertEqual(normalized, "A word with spaces\n\nNext line")
 

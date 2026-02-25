@@ -59,15 +59,29 @@ _ingestion_files_total = 0
 _ingestion_chunks_total = 0
 _retrieval_shadow_eval_total: dict[tuple[str, str, str], int] = defaultdict(int)
 _retrieval_shadow_top1_total: dict[str, int] = defaultdict(int)
-_retrieval_shadow_jaccard_bucket: dict[tuple[str, str, str, str], int] = defaultdict(int)
+_retrieval_shadow_jaccard_bucket: dict[tuple[str, str, str, str], int] = defaultdict(
+    int
+)
 _retrieval_shadow_jaccard_sum: dict[tuple[str, str, str], float] = defaultdict(float)
 _retrieval_shadow_jaccard_count: dict[tuple[str, str, str], int] = defaultdict(int)
-_retrieval_shadow_latency_delta_ms_bucket: dict[tuple[str, str, str, str], int] = defaultdict(int)
-_retrieval_shadow_latency_delta_ms_sum: dict[tuple[str, str, str], float] = defaultdict(float)
-_retrieval_shadow_latency_delta_ms_count: dict[tuple[str, str, str], int] = defaultdict(int)
-_retrieval_shadow_context_token_delta_bucket: dict[tuple[str, str, str, str], int] = defaultdict(int)
-_retrieval_shadow_context_token_delta_sum: dict[tuple[str, str, str], float] = defaultdict(float)
-_retrieval_shadow_context_token_delta_count: dict[tuple[str, str, str], int] = defaultdict(int)
+_retrieval_shadow_latency_delta_ms_bucket: dict[tuple[str, str, str, str], int] = (
+    defaultdict(int)
+)
+_retrieval_shadow_latency_delta_ms_sum: dict[tuple[str, str, str], float] = defaultdict(
+    float
+)
+_retrieval_shadow_latency_delta_ms_count: dict[tuple[str, str, str], int] = defaultdict(
+    int
+)
+_retrieval_shadow_context_token_delta_bucket: dict[tuple[str, str, str, str], int] = (
+    defaultdict(int)
+)
+_retrieval_shadow_context_token_delta_sum: dict[tuple[str, str, str], float] = (
+    defaultdict(float)
+)
+_retrieval_shadow_context_token_delta_count: dict[tuple[str, str, str], int] = (
+    defaultdict(int)
+)
 
 
 def _escape_label(value: str) -> str:
@@ -160,30 +174,38 @@ def observe_retrieval_shadow_eval(
 
         _retrieval_shadow_latency_delta_ms_sum[metric_key] += latency_delta_value
         _retrieval_shadow_latency_delta_ms_count[metric_key] += 1
-        for bucket in _iter_buckets(latency_delta_value, _SHADOW_LATENCY_DELTA_MS_BUCKETS):
+        for bucket in _iter_buckets(
+            latency_delta_value, _SHADOW_LATENCY_DELTA_MS_BUCKETS
+        ):
             _retrieval_shadow_latency_delta_ms_bucket[(*metric_key, bucket)] += 1
 
-        _retrieval_shadow_context_token_delta_sum[metric_key] += context_token_delta_value
+        _retrieval_shadow_context_token_delta_sum[metric_key] += (
+            context_token_delta_value
+        )
         _retrieval_shadow_context_token_delta_count[metric_key] += 1
-        for bucket in _iter_buckets(context_token_delta_value, _SHADOW_CONTEXT_TOKEN_DELTA_BUCKETS):
+        for bucket in _iter_buckets(
+            context_token_delta_value, _SHADOW_CONTEXT_TOKEN_DELTA_BUCKETS
+        ):
             _retrieval_shadow_context_token_delta_bucket[(*metric_key, bucket)] += 1
 
 
 def render_prometheus_text() -> str:
     lines: list[str] = []
     with _lock:
-        lines.append("# HELP atlas_http_requests_total HTTP request count by route, method, and status.")
+        lines.append(
+            "# HELP atlas_http_requests_total HTTP request count by route, method, and status."
+        )
         lines.append("# TYPE atlas_http_requests_total counter")
         for (route, method, status), value in sorted(_http_requests_total.items()):
             lines.append(
-                f'atlas_http_requests_total{_labels(route=route, method=method, status=status)} {value}'
+                f"atlas_http_requests_total{_labels(route=route, method=method, status=status)} {value}"
             )
 
         lines.append("# HELP atlas_http_request_latency_seconds HTTP request latency.")
         lines.append("# TYPE atlas_http_request_latency_seconds histogram")
         for (route, method, le), value in sorted(_http_request_latency_bucket.items()):
             lines.append(
-                f'atlas_http_request_latency_seconds_bucket{_labels(route=route, method=method, le=le)} {value}'
+                f"atlas_http_request_latency_seconds_bucket{_labels(route=route, method=method, le=le)} {value}"
             )
         for (route, method), value in sorted(_http_request_latency_count.items()):
             labels = _labels(route=route, method=method)
@@ -192,17 +214,23 @@ def render_prometheus_text() -> str:
             labels = _labels(route=route, method=method)
             lines.append(f"atlas_http_request_latency_seconds_sum{labels} {value:.6f}")
 
-        lines.append("# HELP atlas_provider_failures_total Provider failures by dependency and normalized code.")
+        lines.append(
+            "# HELP atlas_provider_failures_total Provider failures by dependency and normalized code."
+        )
         lines.append("# TYPE atlas_provider_failures_total counter")
         for (dependency, error_code), value in sorted(_provider_failures_total.items()):
             lines.append(
-                f'atlas_provider_failures_total{_labels(dependency=dependency, error_code=error_code)} {value}'
+                f"atlas_provider_failures_total{_labels(dependency=dependency, error_code=error_code)} {value}"
             )
 
-        lines.append("# HELP atlas_chat_stream_lifecycle_total Chat stream lifecycle counts.")
+        lines.append(
+            "# HELP atlas_chat_stream_lifecycle_total Chat stream lifecycle counts."
+        )
         lines.append("# TYPE atlas_chat_stream_lifecycle_total counter")
         for status, value in sorted(_chat_stream_lifecycle_total.items()):
-            lines.append(f'atlas_chat_stream_lifecycle_total{_labels(status=status)} {value}')
+            lines.append(
+                f"atlas_chat_stream_lifecycle_total{_labels(status=status)} {value}"
+            )
 
         lines.append("# HELP atlas_ingestion_files_total Number of ingested files.")
         lines.append("# TYPE atlas_ingestion_files_total counter")
@@ -212,7 +240,9 @@ def render_prometheus_text() -> str:
         lines.append("# TYPE atlas_ingestion_chunks_total counter")
         lines.append(f"atlas_ingestion_chunks_total {_ingestion_chunks_total}")
 
-        lines.append("# HELP atlas_retrieval_shadow_eval_total Retrieval shadow-eval sample count.")
+        lines.append(
+            "# HELP atlas_retrieval_shadow_eval_total Retrieval shadow-eval sample count."
+        )
         lines.append("# TYPE atlas_retrieval_shadow_eval_total counter")
         for (status, primary_strategy, shadow_strategy), value in sorted(
             _retrieval_shadow_eval_total.items()
@@ -227,7 +257,9 @@ def render_prometheus_text() -> str:
                 + f" {value}"
             )
 
-        lines.append("# HELP atlas_retrieval_shadow_top1_agreement_total Top-1 source agreement counts.")
+        lines.append(
+            "# HELP atlas_retrieval_shadow_top1_agreement_total Top-1 source agreement counts."
+        )
         lines.append("# TYPE atlas_retrieval_shadow_top1_agreement_total counter")
         for matched, value in sorted(_retrieval_shadow_top1_total.items()):
             lines.append(
@@ -236,7 +268,9 @@ def render_prometheus_text() -> str:
                 + f" {value}"
             )
 
-        lines.append("# HELP atlas_retrieval_shadow_jaccard Jaccard overlap between primary and shadow chunks.")
+        lines.append(
+            "# HELP atlas_retrieval_shadow_jaccard Jaccard overlap between primary and shadow chunks."
+        )
         lines.append("# TYPE atlas_retrieval_shadow_jaccard histogram")
         for (status, primary_strategy, shadow_strategy, le), value in sorted(
             _retrieval_shadow_jaccard_bucket.items()
@@ -276,7 +310,9 @@ def render_prometheus_text() -> str:
                 + f" {value:.6f}"
             )
 
-        lines.append("# HELP atlas_retrieval_shadow_latency_delta_ms Shadow minus primary retrieval latency.")
+        lines.append(
+            "# HELP atlas_retrieval_shadow_latency_delta_ms Shadow minus primary retrieval latency."
+        )
         lines.append("# TYPE atlas_retrieval_shadow_latency_delta_ms histogram")
         for (status, primary_strategy, shadow_strategy, le), value in sorted(
             _retrieval_shadow_latency_delta_ms_bucket.items()
@@ -316,7 +352,9 @@ def render_prometheus_text() -> str:
                 + f" {value:.6f}"
             )
 
-        lines.append("# HELP atlas_retrieval_shadow_context_token_delta Shadow minus primary context token proxy.")
+        lines.append(
+            "# HELP atlas_retrieval_shadow_context_token_delta Shadow minus primary context token proxy."
+        )
         lines.append("# TYPE atlas_retrieval_shadow_context_token_delta histogram")
         for (status, primary_strategy, shadow_strategy, le), value in sorted(
             _retrieval_shadow_context_token_delta_bucket.items()

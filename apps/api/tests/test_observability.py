@@ -22,6 +22,7 @@ class ObservabilityTests(unittest.TestCase):
             patcher.start()
 
         if not any(route.path == "/__test_error" for route in app.routes):
+
             @app.get("/__test_error")
             def _test_error():
                 raise RuntimeError("boom")
@@ -36,7 +37,7 @@ class ObservabilityTests(unittest.TestCase):
 
         async def fake_event_stream(payload: dict, request_id: str):
             captured["request_id"] = request_id
-            yield "event: done\ndata: {\"ok\": true}\n\n"
+            yield 'event: done\ndata: {"ok": true}\n\n'
 
         with TestClient(app, raise_server_exceptions=False) as client:
             with patch("app.api.chat._event_stream", side_effect=fake_event_stream):

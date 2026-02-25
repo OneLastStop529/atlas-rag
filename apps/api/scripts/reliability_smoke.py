@@ -37,17 +37,35 @@ def smoke_health_endpoints() -> None:
         _assert(live.get("status") == "ok", f"/health/live payload invalid: {live}")
         _assert(health.get("status") == "ok", f"/health payload invalid: {health}")
 
-        with patch("app.main.get_readiness_payload", return_value={"status": "ok", "checks": {}}):
-            ready_ok = readiness_check()
-            _assert(isinstance(ready_ok, dict), f"expected dict readiness payload, got {type(ready_ok)}")
-            _assert(ready_ok.get("status") == "ok", f"unexpected readiness payload: {ready_ok}")
         with patch(
             "app.main.get_readiness_payload",
-            return_value={"status": "degraded", "checks": {"database": {"status": "error"}}},
+            return_value={"status": "ok", "checks": {}},
+        ):
+            ready_ok = readiness_check()
+            _assert(
+                isinstance(ready_ok, dict),
+                f"expected dict readiness payload, got {type(ready_ok)}",
+            )
+            _assert(
+                ready_ok.get("status") == "ok",
+                f"unexpected readiness payload: {ready_ok}",
+            )
+        with patch(
+            "app.main.get_readiness_payload",
+            return_value={
+                "status": "degraded",
+                "checks": {"database": {"status": "error"}},
+            },
         ):
             ready_bad = readiness_check()
-            _assert(isinstance(ready_bad, JSONResponse), "expected JSONResponse for degraded readiness")
-            _assert(ready_bad.status_code == 503, f"expected 503, got {ready_bad.status_code}")
+            _assert(
+                isinstance(ready_bad, JSONResponse),
+                "expected JSONResponse for degraded readiness",
+            )
+            _assert(
+                ready_bad.status_code == 503,
+                f"expected 503, got {ready_bad.status_code}",
+            )
         _ok(name)
     except Exception as err:
         _fail(name, err)
@@ -56,15 +74,20 @@ def smoke_health_endpoints() -> None:
 def smoke_startup_fail_fast() -> None:
     name = "startup fail-fast"
     try:
+
         async def _runner():
             with patch("app.main.validate_startup_config", return_value=None):
-                with patch("app.main.check_database", side_effect=RuntimeError("db down")):
+                with patch(
+                    "app.main.check_database", side_effect=RuntimeError("db down")
+                ):
                     try:
                         async with app.router.lifespan_context(app):
                             pass
                     except RuntimeError:
                         return
-                    raise AssertionError("startup should fail when dependency checks fail")
+                    raise AssertionError(
+                        "startup should fail when dependency checks fail"
+                    )
 
         asyncio.run(_runner())
         _ok(name)
@@ -77,7 +100,10 @@ class _FakeLLM:
         return "hello"
 
     def build_llm_messages(self, *, query: str, context: str):
-        return [{"role": "user", "content": query}, {"role": "system", "content": context}]
+        return [
+            {"role": "user", "content": query},
+            {"role": "system", "content": context},
+        ]
 
     async def stream_chat(self, messages):
         yield {"delta": "ok"}
@@ -124,16 +150,20 @@ def _make_upload_file(content: bytes) -> UploadFile:
 def smoke_upload_dependency_503() -> None:
     name = "upload dependency maps to 503"
     try:
-        with patch("app.api.upload.extract_text_from_file", new_callable=AsyncMock) as mock_extract:
+        with patch(
+            "app.api.upload.extract_text_from_file", new_callable=AsyncMock
+        ) as mock_extract:
             with patch("app.api.upload.lc_recursive_ch_text", return_value=["chunk"]):
                 with patch("app.api.upload.get_conn") as mock_get_conn:
                     with patch("app.api.upload.get_db_vector_dim", return_value=384):
-                        with patch("app.api.upload.EmbeddingsProvider") as mock_provider:
+                        with patch(
+                            "app.api.upload.EmbeddingsProvider"
+                        ) as mock_provider:
                             mock_extract.return_value = "hello"
                             mock_cur = mock_get_conn.return_value.__enter__.return_value.cursor.return_value
                             mock_cur.__enter__.return_value = mock_cur
-                            mock_provider.return_value.embed_documents.side_effect = RetryableDependencyError(
-                                "provider down"
+                            mock_provider.return_value.embed_documents.side_effect = (
+                                RetryableDependencyError("provider down")
                             )
                             try:
                                 asyncio.run(
@@ -147,8 +177,14 @@ def smoke_upload_dependency_503() -> None:
                             except Exception as err:
                                 from fastapi import HTTPException
 
-                                _assert(isinstance(err, HTTPException), "expected HTTPException")
-                                _assert(err.status_code == 503, f"expected 503 got {err.status_code}")
+                                _assert(
+                                    isinstance(err, HTTPException),
+                                    "expected HTTPException",
+                                )
+                                _assert(
+                                    err.status_code == 503,
+                                    f"expected 503 got {err.status_code}",
+                                )
                                 _ok(name)
                                 return
         raise AssertionError("expected upload_document to raise HTTPException(503)")

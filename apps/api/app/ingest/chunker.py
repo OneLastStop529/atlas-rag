@@ -21,14 +21,12 @@ def normalize_text_for_chunking(text: str) -> str:
 
     # Normalize Unicode spacing artifacts often found in PDFs.
     normalized = (
-        normalized.replace("\u00A0", " ")
-        .replace("\u2007", " ")
-        .replace("\u202F", " ")
+        normalized.replace("\u00a0", " ").replace("\u2007", " ").replace("\u202f", " ")
     )
     normalized = re.sub(r"[\u200B-\u200D\uFEFF]", "", normalized)
 
     # Soft hyphen is a discretionary hyphen and should not survive into chunks.
-    normalized = normalized.replace("\u00AD", "")
+    normalized = normalized.replace("\u00ad", "")
 
     # Join words broken by line-wrap hyphenation (e.g. "inter-\nnational").
     normalized = re.sub(

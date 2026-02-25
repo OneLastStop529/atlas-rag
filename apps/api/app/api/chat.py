@@ -20,7 +20,10 @@ from app.core.metrics import inc_chat_stream_lifecycle, inc_provider_failure
 from app.core.observability import get_request_id, reset_request_id, set_request_id
 from app.core.reliability import DependencyError
 from app.rag.retriever import build_context, get_reformulations, to_citations
-from app.rag.retrieval_strategy import resolve_shadow_retrieval_plan, should_run_shadow_eval
+from app.rag.retrieval_strategy import (
+    resolve_shadow_retrieval_plan,
+    should_run_shadow_eval,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

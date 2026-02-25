@@ -29,10 +29,10 @@ class UploadValidationTests(unittest.TestCase):
     def test_invalid_embeddings_returns_structured_validation_error(self):
         response = asyncio.run(
             upload_document(
-            file=make_upload_file(b"hello world"),
-            embeddings_provider="not-a-provider",
-            chunk_chars=700,
-            overlap_chars=100,
+                file=make_upload_file(b"hello world"),
+                embeddings_provider="not-a-provider",
+                chunk_chars=700,
+                overlap_chars=100,
             )
         )
 
@@ -45,10 +45,10 @@ class UploadValidationTests(unittest.TestCase):
     def test_invalid_chunk_bounds_returns_structured_validation_error(self):
         response = asyncio.run(
             upload_document(
-            file=make_upload_file(b"hello world"),
-            embeddings_provider="hash",
-            chunk_chars=100,
-            overlap_chars=100,
+                file=make_upload_file(b"hello world"),
+                embeddings_provider="hash",
+                chunk_chars=100,
+                overlap_chars=100,
             )
         )
 
@@ -125,7 +125,9 @@ class UploadValidationTests(unittest.TestCase):
         mock_session.execute.return_value = None
 
         mock_embeddings_impl = mock_embeddings_provider.return_value
-        mock_embeddings_impl.embed_documents.side_effect = RetryableDependencyError("provider down")
+        mock_embeddings_impl.embed_documents.side_effect = RetryableDependencyError(
+            "provider down"
+        )
 
         with self.assertRaises(HTTPException) as ctx:
             asyncio.run(

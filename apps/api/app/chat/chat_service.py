@@ -35,12 +35,16 @@ def build_llm_provider(provider: str | None, model: str | None, base_url: str | 
         base_url = base_url or os.getenv("OLLAMA_BASE_URL")
         return OllamaLocal(model=model, base_url=base_url)
 
-    raise HTTPException(status_code=400, detail=f"Unknown LLM provider: {provider_name}")
+    raise HTTPException(
+        status_code=400, detail=f"Unknown LLM provider: {provider_name}"
+    )
 
 
 def select_llm(params: ChatRequest) -> Any:
     if params.llm_provider or params.llm_model or params.llm_base_url:
-        return build_llm_provider(params.llm_provider, params.llm_model, params.llm_base_url)
+        return build_llm_provider(
+            params.llm_provider, params.llm_model, params.llm_base_url
+        )
     return get_llm_provider()
 
 
@@ -83,7 +87,9 @@ def build_log_context(
     }
 
 
-def build_chat_execution_context(payload: dict, request_id: str) -> ChatExecutionContext:
+def build_chat_execution_context(
+    payload: dict, request_id: str
+) -> ChatExecutionContext:
     params = ChatRequest.model_validate(payload)
     advanced_cfg = resolve_advanced_retrieval_config(
         request_payload=params.model_dump(exclude_none=True),

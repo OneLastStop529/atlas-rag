@@ -26,10 +26,16 @@ class TopKRetriever:
         def _retrieve_once():
             with get_conn() as conn:
                 with conn.cursor() as cur:
-                    statement_timeout_ms = int(os.getenv("PG_STATEMENT_TIMEOUT_MS", "15000"))
-                    cur.execute("SET LOCAL statement_timeout = %s", (statement_timeout_ms,))
+                    statement_timeout_ms = int(
+                        os.getenv("PG_STATEMENT_TIMEOUT_MS", "15000")
+                    )
+                    cur.execute(
+                        "SET LOCAL statement_timeout = %s", (statement_timeout_ms,)
+                    )
                     dim = get_db_vector_dim(cur)
-                    embeddings = EmbeddingsProvider(dim=dim, provider=self.embeddings_provider)
+                    embeddings = EmbeddingsProvider(
+                        dim=dim, provider=self.embeddings_provider
+                    )
                     qvec = embeddings.embed_query(query)
                     cur.execute(
                         """

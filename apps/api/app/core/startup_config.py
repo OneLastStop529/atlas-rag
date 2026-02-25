@@ -52,7 +52,9 @@ def validate_startup_config() -> None:
         errors.append(f"LLM_PROVIDER must be one of [{allowed}], got: {llm_provider!r}")
 
     if llm_provider == "openai":
-        openai_base = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
+        openai_base = (
+            os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+        ).strip()
         if not _is_http_url(openai_base):
             errors.append(
                 f"OPENAI_BASE_URL must be a valid http(s) URL when LLM_PROVIDER=openai, got: {openai_base!r}"

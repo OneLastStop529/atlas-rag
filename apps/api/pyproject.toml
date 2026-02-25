@@ -23,3 +23,9 @@ dependencies = [
   "langchain-text-splitters>=1.1.0",
   "pytest>=9.0.2",
 ]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.15.2",
+  "pyright>=1.1.408",
+]

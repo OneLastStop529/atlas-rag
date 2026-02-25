@@ -74,7 +74,9 @@ def get_chunk(
             DocumentORM.collection_id,
         )
         .join(DocumentORM, ChunkORM.document_id == DocumentORM.id)
-        .where(ChunkORM.id == parsed_chunk_id, DocumentORM.collection_id == collection_id)
+        .where(
+            ChunkORM.id == parsed_chunk_id, DocumentORM.collection_id == collection_id
+        )
     )
     row = session.execute(stmt).first()
 

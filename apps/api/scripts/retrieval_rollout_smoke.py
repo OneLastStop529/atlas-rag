@@ -20,10 +20,14 @@ class ScenarioResult:
 def _find_request_id_for_percent(percent: int, want_enabled: bool) -> str:
     for i in range(10000):
         request_id = f"smoke-{percent}-{i}"
-        cfg = resolve_advanced_retrieval_config(request_payload={}, request_id=request_id)
+        cfg = resolve_advanced_retrieval_config(
+            request_payload={}, request_id=request_id
+        )
         if cfg.enabled == want_enabled:
             return request_id
-    raise RuntimeError(f"Could not find request_id for percent={percent}, enabled={want_enabled}")
+    raise RuntimeError(
+        f"Could not find request_id for percent={percent}, enabled={want_enabled}"
+    )
 
 
 def _run_case(name: str, request_id: str) -> ScenarioResult:
@@ -82,7 +86,9 @@ def main() -> None:
         partial_on_id = _find_request_id_for_percent(50, want_enabled=True)
         partial_off_id = _find_request_id_for_percent(50, want_enabled=False)
         partial_on = _run_case("advanced_rollout_50_enabled", request_id=partial_on_id)
-        partial_off = _run_case("advanced_rollout_50_disabled", request_id=partial_off_id)
+        partial_off = _run_case(
+            "advanced_rollout_50_disabled", request_id=partial_off_id
+        )
         assert partial_on.advanced_enabled is True
         assert partial_off.advanced_enabled is False
 

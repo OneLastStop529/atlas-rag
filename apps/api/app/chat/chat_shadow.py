@@ -112,7 +112,9 @@ async def run_shadow_retrieval(
             chat_context_max_chars=chat_context_max_chars,
         )
     except Exception as exc:
-        logger.exception("retrieval_shadow_failed", extra={"shadow_error": str(exc), **log_ctx})
+        logger.exception(
+            "retrieval_shadow_failed", extra={"shadow_error": str(exc), **log_ctx}
+        )
         emit_retrieval_shadow_eval(
             primary_plan=primary_plan,
             primary_chunks=primary_chunks,

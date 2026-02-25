@@ -90,7 +90,9 @@ class StartupConfigValidationTests(unittest.TestCase):
         ):
             with self.assertRaises(RuntimeError) as ctx:
                 validate_startup_config()
-            self.assertIn("OPENAI_BASE_URL must be a valid http(s) URL", str(ctx.exception))
+            self.assertIn(
+                "OPENAI_BASE_URL must be a valid http(s) URL", str(ctx.exception)
+            )
 
 
 if __name__ == "__main__":

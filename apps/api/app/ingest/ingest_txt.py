@@ -50,9 +50,7 @@ def main():
     )
     print(f"Embedding provider: {args.embeddings_provider}")
 
-    embeddings_provider = EmbeddingsProvider(
-        dim=dim, provider=args.embeddings_provider
-    )
+    embeddings_provider = EmbeddingsProvider(dim=dim, provider=args.embeddings_provider)
     embeddings = embeddings_provider.embed_documents(chunks)
 
     doc_id, num_chunks = insert_document_and_chunks(
