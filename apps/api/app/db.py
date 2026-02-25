@@ -6,7 +6,7 @@ from functools import lru_cache
 from pgvector.psycopg2 import register_vector
 from psycopg2.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
 
@@ -15,6 +15,23 @@ engine = create_engine(DATABASE_URL, future=True) if DATABASE_URL else None
 SessionLocal = (
     sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 )
+
+
+def get_session():
+    with session_scope() as db:
+        yield db
+
+
+@contextmanager
+def session_scope():
+    if SessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not set")
+
+    db: Session = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @lru_cache(maxsize=1)
