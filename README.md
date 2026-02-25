@@ -31,6 +31,7 @@ Deployment env var segregation:
 LLM provider segregation:
 - LLM provider and model/base URL are configured per env in `infra/env/<DEPLOY_ENV>.llm.env`.
 - To use OpenAI in an env, set `LLM_PROVIDER=openai` and provide `OPENAI_API_KEY` in that env file.
+- Canonical startup/deploy env + required-secrets matrix: `infra/deployment/STARTUP_ENV_MATRIX.md`.
 
 Schema initialization:
 

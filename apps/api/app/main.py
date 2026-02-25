@@ -23,6 +23,7 @@ from .core.observability import (
     set_request_id,
 )
 from .core.metrics import observe_http_request, render_prometheus_text
+from .core.startup_config import validate_startup_config
 from .providers.factory import get_llm_provider
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,12 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Validate dependencies and provider wiring.
+    # Startup sequence (5.4.2):
+    # 1) Parse + validate startup config and env combinations.
+    # 2) Validate hard dependencies and provider wiring.
+    # 3) Start serving traffic.
     try:
+        validate_startup_config()
         check_database()
         check_vector_extension()
         check_embeddings_provider()

@@ -21,6 +21,9 @@ DEPLOY_ENV=prod docker compose -f infra/docker-compose.yml up -d
 
 Keep secrets out of git for real staging/prod deployments.
 
+Canonical startup/deploy matrix + required secrets:
+- `infra/deployment/STARTUP_ENV_MATRIX.md`
+
 Vector schema is auto-initialized only on first DB volume initialization (`rag_pgdata`).  
 Manual re-apply (idempotent) is available per env:
 

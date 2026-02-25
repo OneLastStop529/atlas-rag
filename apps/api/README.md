@@ -15,6 +15,24 @@
 - `GET /health` and `GET /health/live`: liveness.
 - `GET /health/ready`: dependency readiness (DB, pgvector, embeddings provider). Returns `503` when degraded.
 
+## Startup Validation (5.4.2)
+Startup sequence is deterministic:
+1. Parse/validate startup env config.
+2. Validate hard dependencies (DB, pgvector, embeddings provider).
+3. Start serving requests.
+
+Fail-fast validation rules:
+- `DATABASE_URL` is required.
+- `LLM_PROVIDER` must be one of `ollama|ollama_local|openai`.
+- `EMBEDDINGS_PROVIDER` must be in supported provider IDs.
+- `OLLAMA_BASE_URL` / `OPENAI_BASE_URL` (for selected provider) must be valid `http(s)` URLs.
+- `EXPECTED_EMBEDDING_DIM` and `HASH_EMBEDDING_DIM` (when set) must be positive integers.
+- If both `EXPECTED_EMBEDDING_DIM` and `HASH_EMBEDDING_DIM` are set, they must match.
+
+Notes:
+- `OPENAI_API_KEY` is not startup fail-fast by design.
+- Missing OpenAI key will fail at runtime when OpenAI calls are attempted.
+
 ## Advanced Retrieval Rollout (5.3)
 ### Flags
 - `ADV_RETRIEVAL_ENABLED` (default: `false`)

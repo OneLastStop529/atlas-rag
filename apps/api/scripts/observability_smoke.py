@@ -34,6 +34,7 @@ def smoke_request_correlation_chat_and_upload() -> None:
             yield "event: done\ndata: {\"ok\": true}\n\n"
 
         with (
+            patch("app.main.validate_startup_config", return_value=None),
             patch("app.main.check_database", return_value=None),
             patch("app.main.check_vector_extension", return_value=None),
             patch("app.main.check_embeddings_provider", return_value=None),
@@ -98,6 +99,7 @@ def smoke_metrics_exposed_for_chat_and_upload() -> None:
     name = "metrics exposure for chat and upload"
     try:
         with (
+            patch("app.main.validate_startup_config", return_value=None),
             patch("app.main.check_database", return_value=None),
             patch("app.main.check_vector_extension", return_value=None),
             patch("app.main.check_embeddings_provider", return_value=None),

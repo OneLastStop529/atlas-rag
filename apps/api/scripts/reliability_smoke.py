@@ -57,13 +57,14 @@ def smoke_startup_fail_fast() -> None:
     name = "startup fail-fast"
     try:
         async def _runner():
-            with patch("app.main.check_database", side_effect=RuntimeError("db down")):
-                try:
-                    async with app.router.lifespan_context(app):
-                        pass
-                except RuntimeError:
-                    return
-                raise AssertionError("startup should fail when dependency checks fail")
+            with patch("app.main.validate_startup_config", return_value=None):
+                with patch("app.main.check_database", side_effect=RuntimeError("db down")):
+                    try:
+                        async with app.router.lifespan_context(app):
+                            pass
+                    except RuntimeError:
+                        return
+                    raise AssertionError("startup should fail when dependency checks fail")
 
         asyncio.run(_runner())
         _ok(name)

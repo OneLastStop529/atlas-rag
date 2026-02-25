@@ -257,7 +257,10 @@ Next execution order:
 - [x] Readiness/liveness probe policy documented and applied to deployment targets.
   - Policy doc: `infra/deployment/HEALTH_GATING_POLICY.md`
   - Local deployment target enforcement: `infra/docker-compose.yml` healthchecks/dependencies.
-- [ ] Startup sequencing + env validation enforced with fail-fast behavior.
+- [x] Startup sequencing + env validation enforced with fail-fast behavior.
+  - Startup sequence wired in `apps/api/app/main.py` via `validate_startup_config()` before dependency checks.
+  - Validation rules implemented in `apps/api/app/core/startup_config.py`.
+  - Canonical env/secrets matrix: `infra/deployment/STARTUP_ENV_MATRIX.md`.
 - [ ] Provider outage, vector DB, and backlog runbooks added and reviewed.
 - [ ] Rollback playbook documented with verified command sequence.
 - [ ] Release gates defined (error rate, p95 latency, readiness failures) and wired to go/no-go checks.
@@ -271,6 +274,12 @@ Next execution order:
   - `DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml up -d db api`
   - `set -o pipefail; infra/scripts/deploy_health_gate.sh --api-url http://localhost:8000 --timeout-seconds 120 --interval-seconds 2 | tee infra/evidence/5.4.1/dev-<timestamp>-health-gate.log`
   - Result: pass (`live=200`, `ready=200`)
+
+5.4.2 Validation evidence
+- Test command:
+  - `cd apps/api && .venv/bin/python -m pytest -q tests/test_startup_config.py tests/test_observability.py`
+- Result:
+  - `8 passed`
 
 ### 5.5: Optimization pass (after stability)
 - Profile hot paths and tune chunking/retrieval defaults based on observed production metrics.

@@ -12,6 +12,7 @@ class ObservabilityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._patchers = [
+            patch("app.main.validate_startup_config", return_value=None),
             patch("app.main.check_database", return_value=None),
             patch("app.main.check_vector_extension", return_value=None),
             patch("app.main.check_embeddings_provider", return_value=None),
