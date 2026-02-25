@@ -21,3 +21,9 @@ DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml --profile observabilit
   - API error rate > 5% for 5m
   - Chat p95 latency > 3s for 10m
   - Readiness failures sustained for 2m
+
+Release go/no-go checks can be run with:
+
+```bash
+infra/scripts/release_gate_check.sh --api-url http://localhost:8000 --prom-url http://localhost:9090
+```

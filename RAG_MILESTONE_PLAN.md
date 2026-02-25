@@ -245,7 +245,7 @@ Acceptance
 - Deployments have automated health gating and deterministic rollback steps.
 - On-call has documented runbooks for top failure classes.
 
-Status: ⏳ Planned
+Status: ✅ Complete (2026-02-25)
 Next execution order:
 1) Deployment health gating
 2) Startup sequencing + config validation
@@ -261,11 +261,21 @@ Next execution order:
   - Startup sequence wired in `apps/api/app/main.py` via `validate_startup_config()` before dependency checks.
   - Validation rules implemented in `apps/api/app/core/startup_config.py`.
   - Canonical env/secrets matrix: `infra/deployment/STARTUP_ENV_MATRIX.md`.
-- [ ] Provider outage, vector DB, and backlog runbooks added and reviewed.
-- [ ] Rollback playbook documented with verified command sequence.
-- [ ] Release gates defined (error rate, p95 latency, readiness failures) and wired to go/no-go checks.
-- [ ] Smoke/tests cover deploy health gate behavior and rollback verification path.
-- [ ] Closeout evidence added (commands, test output, dashboard/alert references) and 5.4 marked complete.
+- [x] Provider outage, vector DB, and backlog runbooks added and reviewed.
+  - `infra/deployment/runbooks/PROVIDER_OUTAGE.md`
+  - `infra/deployment/runbooks/VECTOR_DB_OUTAGE.md`
+  - `infra/deployment/runbooks/INGESTION_BACKLOG.md`
+- [x] Rollback playbook documented with verified command sequence.
+  - `infra/deployment/ROLLBACK_PLAYBOOK.md`
+  - Simulation command: `DEPLOY_ENV=staging infra/scripts/release_simulation.sh --api-url http://localhost:8000`
+- [x] Release gates defined (error rate, p95 latency, readiness failures) and wired to go/no-go checks.
+  - Gate policy: `infra/deployment/RELEASE_GATES.md`
+  - Go/no-go script: `infra/scripts/release_gate_check.sh`
+  - CI wiring: `.github/workflows/release-gates-and-rollback.yml`
+- [x] Smoke/tests cover deploy health gate behavior and rollback verification path.
+  - Deploy gate smoke: `infra/scripts/deploy_health_gate.sh`
+  - Rollback verification smoke: `infra/scripts/release_simulation.sh`
+- [x] Closeout evidence added (commands, test output, dashboard/alert references) and 5.4 marked complete.
 
 5.4.1 Gate command + evidence path
 - Gate command: `infra/scripts/deploy_health_gate.sh --api-url <API_URL> --timeout-seconds 180 --interval-seconds 2`
@@ -280,6 +290,35 @@ Next execution order:
   - `cd apps/api && .venv/bin/python -m pytest -q tests/test_startup_config.py tests/test_observability.py`
 - Result:
   - `8 passed`
+
+5.4.3 Runbook evidence
+- Runbooks added:
+  - `infra/deployment/runbooks/PROVIDER_OUTAGE.md`
+  - `infra/deployment/runbooks/VECTOR_DB_OUTAGE.md`
+  - `infra/deployment/runbooks/INGESTION_BACKLOG.md`
+
+5.4.4 Release gates + rollback evidence
+- Release gates command:
+  - `infra/scripts/release_gate_check.sh --api-url http://localhost:8000 --prom-url http://localhost:9090`
+- Rollback simulation command:
+  - `DEPLOY_ENV=staging infra/scripts/release_simulation.sh --api-url http://localhost:8000`
+- Command docs:
+  - `infra/deployment/RELEASE_GATES.md`
+  - `infra/deployment/ROLLBACK_PLAYBOOK.md`
+- Local evidence run (2026-02-24):
+  - `infra/evidence/5.4.5/dev-20260224-221908-release-gates.log` (pass)
+  - `infra/evidence/5.4.5/staging-20260224-214238-01-baseline-pass.log` (pass)
+  - `infra/evidence/5.4.5/staging-20260224-214238-02-bad-release.log` (expected fail during simulated bad release)
+  - `infra/evidence/5.4.5/staging-20260224-214238-03-rollback-pass.log` (pass after rollback)
+
+5.4.5 Operational readiness evidence path
+- Evidence directory:
+  - `infra/evidence/5.4.5/`
+- CI job:
+  - `.github/workflows/release-gates-and-rollback.yml`
+- Alert/dashboard references:
+  - `infra/observability/prometheus/alerts.yml`
+  - `infra/observability/grafana/dashboards/atlas-api-overview.json`
 
 ### 5.5: Optimization pass (after stability)
 - Profile hot paths and tune chunking/retrieval defaults based on observed production metrics.

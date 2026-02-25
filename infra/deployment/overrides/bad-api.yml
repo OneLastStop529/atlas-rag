@@ -1,0 +1,5 @@
+services:
+  api:
+    environment:
+      # Intentionally broken DB target for rollback simulation.
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag_missing

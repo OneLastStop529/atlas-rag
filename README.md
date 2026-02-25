@@ -87,6 +87,28 @@ infra/scripts/deploy_health_gate.sh --api-url http://localhost:8000 --timeout-se
   | tee "infra/evidence/5.4.1/dev-$(date +%Y%m%d-%H%M%S)-health-gate.log"
 ```
 
+### Incident runbooks + rollback + release gates (5.4.3-5.4.5)
+- Incident runbooks:
+  - `infra/deployment/runbooks/PROVIDER_OUTAGE.md`
+  - `infra/deployment/runbooks/VECTOR_DB_OUTAGE.md`
+  - `infra/deployment/runbooks/INGESTION_BACKLOG.md`
+- Rollback playbook:
+  - `infra/deployment/ROLLBACK_PLAYBOOK.md`
+- Release gate policy:
+  - `infra/deployment/RELEASE_GATES.md`
+
+Go/no-go release gate command:
+
+```bash
+infra/scripts/release_gate_check.sh --api-url http://localhost:8000 --prom-url http://localhost:9090
+```
+
+Promotion + rollback simulation command:
+
+```bash
+DEPLOY_ENV=staging infra/scripts/release_simulation.sh --api-url http://localhost:8000
+```
+
 ### 1) Start the database (Postgres + pgvector)
 The docker compose file uses `pgvector/pgvector:pg16` with default credentials.
 

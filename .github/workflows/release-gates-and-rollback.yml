@@ -1,0 +1,71 @@
+name: Release Gates And Rollback Simulation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "infra/**"
+      - "apps/api/**"
+      - ".github/workflows/release-gates-and-rollback.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - "apps/api/**"
+      - ".github/workflows/release-gates-and-rollback.yml"
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      DEPLOY_ENV: dev
+      API_URL: http://localhost:8000
+      PROM_URL: http://localhost:9090
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start stack with observability
+        run: docker compose -f infra/docker-compose.yml --profile observability up --build -d db api prometheus grafana
+
+      - name: Wait for Prometheus ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "${PROM_URL}/-/ready" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Prometheus did not become ready" >&2
+          exit 1
+
+      - name: Run release go/no-go gates
+        run: |
+          mkdir -p infra/evidence/5.4.5
+          set -o pipefail
+          infra/scripts/release_gate_check.sh \
+            --api-url "${API_URL}" \
+            --prom-url "${PROM_URL}" \
+            | tee infra/evidence/5.4.5/ci-${{ github.run_id }}-release-gates.log
+
+      - name: Run rollback simulation
+        run: |
+          DEPLOY_ENV=${DEPLOY_ENV} infra/scripts/release_simulation.sh --api-url "${API_URL}" --keep-running
+
+      - name: Upload 5.4.5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ github.run_id }}
+          path: infra/evidence/5.4.5/*.log
+          if-no-files-found: warn
+
+      - name: Compose logs (api, db, prometheus)
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml --profile observability logs --no-color api db prometheus
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --profile observability down -v
