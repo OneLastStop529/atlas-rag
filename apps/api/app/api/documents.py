@@ -1,125 +1,117 @@
-from fastapi import APIRouter, HTTPException
-from app.db import get_conn
 import uuid
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from app.db import get_session
+from app.models import Document as DocumentORM
+from app.schemas import Chunk, Document
 
 
 router = APIRouter()
 
 
 @router.get("/documents")
-def list_documents(collection_id: str = "default", limit: int = 10, offset: int = 0):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT d.id::text, d.file_name, d.mime_type, d.created_at,
-                (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
-                FROM documents d
-                WHERE d.collection_id = %s
-                ORDER BY d.created_at DESC
-                LIMIT %s OFFSET %s
-                """,
-                (collection_id, limit, offset),
-            )
-            rows = cur.fetchall()
+def list_documents(
+    collection_id: str = "default",
+    limit: int = 10,
+    offset: int = 0,
+    session: Session = Depends(get_session),
+):
+    stmt = (
+        select(DocumentORM)
+        .where(DocumentORM.collection_id == collection_id)
+        .order_by(DocumentORM.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    rows = session.scalars(stmt).all()
 
     return {
         "items": [
-            {
-                "document_id": r[0],
-                "file_name": r[1],
-                "mime_type": r[2],
-                "created_at": r[3],
-                "chunk_count": r[4],
-            }
+            Document(
+                id=str(r.id),
+                file_name=r.file_name,
+                mime_type=r.mime_type,
+                created_at=r.created_at,
+                collection_id=r.collection_id,
+                meta=None,  # Meta is not included in the list view
+            )
             for r in rows
         ]
     }
 
 
 @router.get("/documents/{document_id}")
-def get_document(document_id: str, collection_id: str = "default"):
+def get_document(
+    document_id: str,
+    collection_id: str = "default",
+    session: Session = Depends(get_session),
+) -> Document:
     try:
-        uuid.UUID(document_id)  # Validate UUID format
+        parsed_document_id = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid document ID format")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            # Get document info
-            cur.execute(
-                """
-                SELECT d.id::text, d.file_name, d.mime_type, d.created_at, d.meta
-                FROM documents d
-                WHERE d.id = %s AND d.collection_id = %s
-                """,
-                (document_id, collection_id),
+    stmt = (
+        select(DocumentORM)
+        .options(selectinload(DocumentORM.chunks))
+        .where(
+            DocumentORM.id == parsed_document_id,
+            DocumentORM.collection_id == collection_id,
+        )
+    )
+    doc = session.scalars(stmt).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return Document(
+        id=str(doc.id),
+        file_name=doc.file_name,
+        mime_type=doc.mime_type,
+        created_at=doc.created_at,
+        meta=doc.meta,
+        collection_id=doc.collection_id,
+        chunks=[
+            Chunk(
+                id=str(chunk.id),
+                document_id=str(chunk.document_id),
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                meta=chunk.meta,
             )
-            doc_row = cur.fetchone()
-
-            if not doc_row:
-                raise HTTPException(status_code=404, detail="Document not found")
-
-            # Get document chunks
-            cur.execute(
-                """
-                SELECT chunk_index, content, meta
-                FROM chunks
-                WHERE document_id = %s
-                ORDER BY chunk_index
-                """,
-                (document_id,),
-            )
-            chunk_rows = cur.fetchall()
-
-            return {
-                "document_id": doc_row[0],
-                "file_name": doc_row[1],
-                "mime_type": doc_row[2],
-                "created_at": doc_row[3],
-                "meta": doc_row[4],
-                "chunks": [
-                    {
-                        "chunk_index": r[0],
-                        "content": r[1],
-                        "meta": r[2],
-                    }
-                    for r in chunk_rows
-                ],
-            }
+            for chunk in doc.chunks
+        ],
+    )
 
 
 @router.delete("/documents/{document_id}")
-def delete_document(document_id: str, collection_id: str = "default"):
+def delete_document(
+    document_id: str,
+    collection_id: str = "default",
+    session: Session = Depends(get_session),
+):
     try:
-        uuid.UUID(document_id)  # Validate UUID format
+        parsed_document_id = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid document ID format")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            # Check if document exists and get info
-            cur.execute(
-                """
-                SELECT d.file_name FROM documents d
-                WHERE d.id = %s AND d.collection_id = %s
-                """,
-                (document_id, collection_id),
-            )
-            doc_row = cur.fetchone()
+    stmt = select(DocumentORM).where(
+        DocumentORM.id == parsed_document_id,
+        DocumentORM.collection_id == collection_id,
+    )
+    doc = session.scalars(stmt).first()
 
-            if not doc_row:
-                raise HTTPException(status_code=404, detail="Document not found")
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
 
-            # Delete document (chunks will be deleted due to CASCADE)
-            cur.execute(
-                "DELETE FROM documents WHERE id = %s AND collection_id = %s",
-                (document_id, collection_id),
-            )
+    file_name = doc.file_name
+    session.delete(doc)
+    session.commit()
 
-            conn.commit()
-
-            return {
-                "message": f"Document '{doc_row[0]}' deleted successfully",
-                "document_id": document_id,
-            }
+    return {
+        "message": f"Document '{file_name}' deleted successfully",
+        "document_id": document_id,
+    }

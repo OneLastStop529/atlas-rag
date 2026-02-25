@@ -1,7 +1,13 @@
-from fastapi import APIRouter, HTTPException
-from app.db import get_conn
 import uuid
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_session
+from app.models import Chunk as ChunkORM
+from app.models import Document as DocumentORM
+from app.schemas import Chunk, Document
 
 router = APIRouter()
 
@@ -12,147 +18,127 @@ def list_chunks(
     limit: int = 10,
     offset: int = 0,
     document_id: str | None = None,
+    session: Session = Depends(get_session),
 ):
     """List chunks with optional filtering by document."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            if document_id:
-                # Validate document_id UUID format
-                try:
-                    uuid.UUID(document_id)
-                except ValueError:
-                    raise HTTPException(
-                        status_code=400, detail="Invalid document ID format"
-                    )
+    stmt = (
+        select(ChunkORM, DocumentORM.created_at, DocumentORM.file_name)
+        .join(DocumentORM, ChunkORM.document_id == DocumentORM.id)
+        .where(DocumentORM.collection_id == collection_id)
+        .order_by(ChunkORM.document_id, ChunkORM.chunk_index)
+        .offset(offset)
+        .limit(limit)
+    )
+    if document_id:
+        try:
+            parsed_document_id = uuid.UUID(document_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid document ID format")
+        stmt = stmt.where(ChunkORM.document_id == parsed_document_id)
 
-                cur.execute(
-                    """
-                    SELECT c.id::text, c.document_id::text, c.chunk_index, c.content, c.meta, d.created_at,
-                           d.file_name
-                    FROM chunks c
-                    JOIN documents d ON c.document_id = d.id
-                    WHERE d.collection_id = %s AND c.document_id = %s
-                    ORDER BY c.document_id, c.chunk_index
-                    LIMIT %s OFFSET %s
-                    """,
-                    (collection_id, document_id, limit, offset),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT c.id::text, c.document_id::text, c.chunk_index, c.content, c.meta, d.created_at,
-                           d.file_name
-                    FROM chunks c
-                    JOIN documents d ON c.document_id = d.id
-                    WHERE d.collection_id = %s
-                    ORDER BY c.document_id, c.chunk_index
-                    LIMIT %s OFFSET %s
-                    """,
-                    (collection_id, limit, offset),
-                )
-            rows = cur.fetchall()
+    rows = session.execute(stmt).all()
 
     return {
         "items": [
-            {
-                "chunk_id": r[0],
-                "document_id": r[1],
-                "chunk_index": r[2],
-                "content": r[3],
-                "meta": r[4],
-                "created_at": r[5],
-                "file_name": r[6],
-            }
-            for r in rows
+            Chunk(
+                id=str(chunk.id),
+                document_id=str(chunk.document_id),
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                meta=chunk.meta,
+                created_at=created_at,
+                file_name=file_name,
+            )
+            for chunk, created_at, file_name in rows
         ]
     }
 
 
 @router.get("/chunks/{chunk_id}")
-def get_chunk(chunk_id: str, collection_id: str = "default"):
+def get_chunk(
+    chunk_id: str,
+    collection_id: str = "default",
+    session: Session = Depends(get_session),
+) -> Chunk:
     """Get a specific chunk by ID."""
     try:
-        uuid.UUID(chunk_id)  # Validate UUID format
+        parsed_chunk_id = uuid.UUID(chunk_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid chunk ID format")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.id::text, c.document_id::text, c.chunk_index, c.content, c.meta, d.created_at,
-                       d.file_name, d.collection_id
-                FROM chunks c
-                JOIN documents d ON c.document_id = d.id
-                WHERE c.id = %s AND d.collection_id = %s
-                """,
-                (chunk_id, collection_id),
-            )
-            row = cur.fetchone()
+    stmt = (
+        select(
+            ChunkORM,
+            DocumentORM.created_at,
+            DocumentORM.file_name,
+            DocumentORM.collection_id,
+        )
+        .join(DocumentORM, ChunkORM.document_id == DocumentORM.id)
+        .where(ChunkORM.id == parsed_chunk_id, DocumentORM.collection_id == collection_id)
+    )
+    row = session.execute(stmt).first()
 
-            if not row:
-                raise HTTPException(status_code=404, detail="Chunk not found")
+    if not row:
+        raise HTTPException(status_code=404, detail="Chunk not found")
 
-            return {
-                "chunk_id": row[0],
-                "document_id": row[1],
-                "chunk_index": row[2],
-                "content": row[3],
-                "meta": row[4],
-                "created_at": row[5],
-                "file_name": row[6],
-                "collection_id": row[7],
-            }
+    chunk, created_at, file_name, resolved_collection_id = row
+    return Chunk(
+        id=str(chunk.id),
+        document_id=str(chunk.document_id),
+        chunk_index=chunk.chunk_index,
+        content=chunk.content,
+        meta=chunk.meta,
+        created_at=created_at,
+        file_name=file_name,
+        collection_id=resolved_collection_id,
+    )
 
 
 @router.get("/documents/{document_id}/chunks")
 def get_document_chunks(
-    document_id: str, collection_id: str = "default", limit: int = 100, offset: int = 0
-):
+    document_id: str,
+    collection_id: str = "default",
+    limit: int = 100,
+    offset: int = 0,
+    session: Session = Depends(get_session),
+) -> Document:
     """Get all chunks for a specific document."""
     try:
-        uuid.UUID(document_id)  # Validate document ID format
+        parsed_document_id = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid document ID format")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            # Verify document exists in the collection
-            cur.execute(
-                """
-                SELECT d.file_name FROM documents d
-                WHERE d.id = %s AND d.collection_id = %s
-                """,
-                (document_id, collection_id),
+    doc_stmt = select(DocumentORM).where(
+        DocumentORM.id == parsed_document_id, DocumentORM.collection_id == collection_id
+    )
+    doc = session.scalars(doc_stmt).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    chunk_stmt = (
+        select(ChunkORM)
+        .where(ChunkORM.document_id == parsed_document_id)
+        .order_by(ChunkORM.chunk_index)
+        .offset(offset)
+        .limit(limit)
+    )
+    chunk_rows = session.scalars(chunk_stmt).all()
+
+    return Document(
+        id=document_id,
+        file_name=doc.file_name,
+        mime_type=doc.mime_type,
+        created_at=doc.created_at,
+        meta=doc.meta,
+        collection_id=collection_id,
+        chunks=[
+            Chunk(
+                id=str(chunk.id),
+                document_id=document_id,
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                meta=chunk.meta,
             )
-            doc_row = cur.fetchone()
-
-            if not doc_row:
-                raise HTTPException(status_code=404, detail="Document not found")
-
-            # Get chunks for this document
-            cur.execute(
-                """
-                SELECT c.id::text, c.chunk_index, c.content, c.meta
-                FROM chunks c
-                WHERE c.document_id = %s
-                ORDER BY c.chunk_index
-                LIMIT %s OFFSET %s
-                """,
-                (document_id, limit, offset),
-            )
-            chunk_rows = cur.fetchall()
-
-            return {
-                "document_id": document_id,
-                "file_name": doc_row[0],
-                "chunks": [
-                    {
-                        "chunk_id": r[0],
-                        "chunk_index": r[1],
-                        "content": r[2],
-                        "meta": r[3],
-                    }
-                    for r in chunk_rows
-                ],
-            }
+            for chunk in chunk_rows
+        ],
+    )
