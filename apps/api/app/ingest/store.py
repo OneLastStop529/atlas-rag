@@ -3,9 +3,8 @@ from __future__ import annotations
 import uuid
 from typing import List, Tuple
 
-from psycopg2.extras import Json
-
-from app.db import get_conn
+from app.db import SessionLocal
+from app.models import Chunk, Document
 
 
 def insert_document_and_chunks(
@@ -19,26 +18,32 @@ def insert_document_and_chunks(
     if len(chunks) != len(embeddings):
         raise ValueError("Number of chunks and embeddings must match")
 
-    doc_id = str(uuid.uuid4())
+    if SessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not set")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO documents (id, collection_id, file_name, mime_type)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (doc_id, collection_id, file_name, mime_type),
+    doc_id = uuid.uuid4()
+    with SessionLocal.begin() as session:
+        session.add(
+            Document(
+                id=doc_id,
+                collection_id=collection_id,
+                file_name=file_name,
+                mime_type=mime_type,
+                meta={},
             )
-
-            for idx, (content, emb) in enumerate(zip(chunks, embeddings)):
-                chunk_id = str(uuid.uuid4())
-                cur.execute(
-                    """
-                    INSERT INTO chunks (id, document_id, chunk_index, content, embedding, meta)
-                    VALUES (%s, %s, %s, %s, %s::vector, %s)
-                    """,
-                    (chunk_id, doc_id, idx, content, emb, Json({})),
+        )
+        session.add_all(
+            [
+                Chunk(
+                    id=uuid.uuid4(),
+                    document_id=doc_id,
+                    chunk_index=idx,
+                    content=content,
+                    embedding=emb,
+                    meta={},
                 )
-        conn.commit()
+                for idx, (content, emb) in enumerate(zip(chunks, embeddings))
+            ]
+        )
+
     return str(doc_id), len(chunks)

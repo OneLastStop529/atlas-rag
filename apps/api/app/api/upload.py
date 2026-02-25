@@ -6,15 +6,20 @@ from time import perf_counter
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
+from sqlalchemy import text as sa_text
+
 from app.ingest.chunker import ChunkConfig, lc_recursive_ch_text
 from app.ingest.store import insert_document_and_chunks
 from app.ingest.pgvector_dim import get_db_vector_dim
+from app.ingest.pgvector_dim import get_db_vector_dim_session
 from app.core.reliability import (
     DependencyError,
     retry_with_backoff,
 )
 from app.core.metrics import inc_provider_failure, observe_ingestion_throughput
+# Keep get_conn import for existing tests that patch this symbol.
 from app.db import get_conn
+from app.db import session_scope
 from app.providers.embeddings.base import EmbeddingsProvider
 from app.providers.embeddings.registry import (
     normalize_embeddings_provider_id,
@@ -225,11 +230,13 @@ async def upload_document(
 
         # Get database vector dimension
         def _resolve_vector_dim() -> int:
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    statement_timeout_ms = int(os.getenv("PG_STATEMENT_TIMEOUT_MS", "15000"))
-                    cur.execute("SET LOCAL statement_timeout = %s", (statement_timeout_ms,))
-                    return get_db_vector_dim(cur)
+            with session_scope() as session:
+                statement_timeout_ms = int(os.getenv("PG_STATEMENT_TIMEOUT_MS", "15000"))
+                session.execute(
+                    sa_text("SET LOCAL statement_timeout = :timeout_ms"),
+                    {"timeout_ms": statement_timeout_ms},
+                )
+                return get_db_vector_dim_session(session)
 
         stage_started_at = perf_counter()
         try:

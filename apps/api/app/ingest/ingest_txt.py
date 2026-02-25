@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import os
-from app.db import get_conn
+from app.db import session_scope
 from app.ingest.chunker import ChunkConfig, lc_recursive_ch_text
 from app.ingest.store import insert_document_and_chunks
-from app.ingest.pgvector_dim import get_db_vector_dim
+from app.ingest.pgvector_dim import get_db_vector_dim_session
 from app.providers.embeddings.base import EmbeddingsProvider
 from app.providers.embeddings.registry import supported_embeddings_provider_ids
 
@@ -41,9 +41,8 @@ def main():
     if not chunks:
         raise SystemExit("No content found to ingest")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            dim = get_db_vector_dim(cur)
+    with session_scope() as session:
+        dim = get_db_vector_dim_session(session)
 
     print(f"DB vector dim: {dim}")
     print(

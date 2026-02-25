@@ -4,7 +4,9 @@ import os
 import time
 from typing import Any
 
-from app.db import get_conn
+from sqlalchemy import text
+
+from app.db import session_scope
 from app.providers.factory import get_embeddings_provider
 
 
@@ -21,19 +23,17 @@ def _readiness_cache_ttl_seconds() -> float:
 
 
 def check_database() -> None:
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-            cur.fetchone()
+    with session_scope() as session:
+        session.execute(text("SELECT 1")).scalar_one()
 
 
 def check_vector_extension() -> None:
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM pg_extension WHERE extname='vector'")
-            row = cur.fetchone()
-            if not row:
-                raise RuntimeError("pgvector extension is not installed")
+    with session_scope() as session:
+        row = session.execute(
+            text("SELECT 1 FROM pg_extension WHERE extname='vector'")
+        ).first()
+        if not row:
+            raise RuntimeError("pgvector extension is not installed")
 
 
 def check_embeddings_provider() -> None:
