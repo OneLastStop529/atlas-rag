@@ -73,15 +73,15 @@ class ObservabilityTests(unittest.TestCase):
 
     @patch("app.api.upload.insert_document_and_chunks")
     @patch("app.api.upload.EmbeddingsProvider")
-    @patch("app.api.upload.get_db_vector_dim")
-    @patch("app.api.upload.get_conn")
+    @patch("app.api.upload.get_db_vector_dim_session")
+    @patch("app.api.upload.session_scope")
     @patch("app.api.upload.lc_recursive_ch_text")
     @patch("app.api.upload.extract_text_from_file", new_callable=AsyncMock)
     def test_provider_failure_metric_increments_on_upload_failure(
         self,
         mock_extract_text,
         mock_chunk_text,
-        mock_get_conn,
+        mock_session_scope,
         mock_get_dim,
         mock_embeddings_provider,
         _mock_insert,
@@ -90,8 +90,8 @@ class ObservabilityTests(unittest.TestCase):
         mock_chunk_text.return_value = ["hello world"]
         mock_get_dim.return_value = 384
 
-        mock_cur = mock_get_conn.return_value.__enter__.return_value.cursor.return_value
-        mock_cur.__enter__.return_value = mock_cur
+        mock_session = mock_session_scope.return_value.__enter__.return_value
+        mock_session.execute.return_value = None
 
         mock_embeddings_impl = mock_embeddings_provider.return_value
         mock_embeddings_impl.embed_documents.side_effect = RetryableDependencyError(
