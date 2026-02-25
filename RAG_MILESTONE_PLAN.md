@@ -219,15 +219,58 @@ Status: ✅ Complete (2026-02-24)
   - Result: `26 passed`.
 
 ### 5.4: Infra deployment hardening (fourth)
-- Standardize deployment checks: readiness/liveness probes, startup sequencing, and config validation.
-- Add runbooks for common incidents (provider outage, vector DB issues, queue backlogs).
-- Add rollback playbook and release gates tied to error/latency thresholds.
+5.4 Execution Scope
+- 5.4.1 Deployment health gating
+  - Standardize readiness/liveness probes across local/dev/stage/prod deploy targets.
+  - Enforce startup gating so traffic is accepted only after `/health/ready` is `200`.
+  - Add deploy-time smoke gate that fails release when readiness is degraded.
+- 5.4.2 Startup sequencing + config validation
+  - Define deterministic startup sequence: config parse -> dependency checks -> app serve.
+  - Validate required env vars and reject invalid combinations early with actionable errors.
+  - Document canonical startup/deploy env matrix (`dev`, `staging`, `prod`) and required secrets.
+- 5.4.3 Incident runbooks
+  - Create runbook for LLM/embeddings provider outage (symptoms, triage, mitigation, recovery checks).
+  - Create runbook for vector DB degradation/outage (connectivity, extension/index health, failover/restart).
+  - Create runbook for ingestion backlog/queue pressure (detection signals, throttling, drain strategy).
+- 5.4.4 Rollback playbook + release gates
+  - Add deterministic rollback procedure with exact commands and post-rollback verification.
+  - Define release gates tied to latency/error thresholds and readiness behavior.
+  - Require gates to pass in stage before prod promotion.
+- 5.4.5 Validation + operational readiness evidence
+  - Add tests/smoke coverage for health gating and degraded dependency behavior during deploy.
+  - Run one release simulation (promote + rollback) and capture evidence in repo docs.
+  - Attach links/paths for dashboard panels and alert rules used by on-call during rollout.
 
 Acceptance
 - Deployments have automated health gating and deterministic rollback steps.
 - On-call has documented runbooks for top failure classes.
 
 Status: ⏳ Planned
+Next execution order:
+1) Deployment health gating
+2) Startup sequencing + config validation
+3) Incident runbooks
+4) Rollback playbook + release gates
+5) Validation and release simulation
+
+5.4 Closeout Checklist
+- [x] Readiness/liveness probe policy documented and applied to deployment targets.
+  - Policy doc: `infra/deployment/HEALTH_GATING_POLICY.md`
+  - Local deployment target enforcement: `infra/docker-compose.yml` healthchecks/dependencies.
+- [ ] Startup sequencing + env validation enforced with fail-fast behavior.
+- [ ] Provider outage, vector DB, and backlog runbooks added and reviewed.
+- [ ] Rollback playbook documented with verified command sequence.
+- [ ] Release gates defined (error rate, p95 latency, readiness failures) and wired to go/no-go checks.
+- [ ] Smoke/tests cover deploy health gate behavior and rollback verification path.
+- [ ] Closeout evidence added (commands, test output, dashboard/alert references) and 5.4 marked complete.
+
+5.4.1 Gate command + evidence path
+- Gate command: `infra/scripts/deploy_health_gate.sh --api-url <API_URL> --timeout-seconds 180 --interval-seconds 2`
+- Evidence directory: `infra/evidence/5.4.1/`
+- Dev evidence run (2026-02-24):
+  - `DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml up -d db api`
+  - `set -o pipefail; infra/scripts/deploy_health_gate.sh --api-url http://localhost:8000 --timeout-seconds 120 --interval-seconds 2 | tee infra/evidence/5.4.1/dev-<timestamp>-health-gate.log`
+  - Result: pass (`live=200`, `ready=200`)
 
 ### 5.5: Optimization pass (after stability)
 - Profile hot paths and tune chunking/retrieval defaults based on observed production metrics.

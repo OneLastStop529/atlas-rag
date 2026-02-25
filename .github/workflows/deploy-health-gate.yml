@@ -1,0 +1,56 @@
+name: Deploy Health Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "infra/**"
+      - "apps/api/**"
+      - ".github/workflows/deploy-health-gate.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - "apps/api/**"
+      - ".github/workflows/deploy-health-gate.yml"
+
+jobs:
+  health-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOY_ENV: dev
+      API_URL: http://localhost:8000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start stack (db + api)
+        run: docker compose -f infra/docker-compose.yml up --build -d db api
+
+      - name: Run deploy health gate
+        run: |
+          mkdir -p infra/evidence/5.4.1
+          set -o pipefail
+          infra/scripts/deploy_health_gate.sh \
+            --api-url "${API_URL}" \
+            --timeout-seconds 180 \
+            --interval-seconds 2 \
+            | tee infra/evidence/5.4.1/ci-${{ github.run_id }}-health-gate.log
+
+      - name: Upload health gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-gate-evidence-${{ github.run_id }}
+          path: infra/evidence/5.4.1/*.log
+          if-no-files-found: warn
+
+      - name: Compose logs (api, db)
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color api db
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down -v

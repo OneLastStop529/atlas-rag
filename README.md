@@ -10,17 +10,94 @@ This repo is split into:
 - `apps/api`: FastAPI backend
 - `infra`: Postgres + pgvector Docker compose and schema
 
+## Dockerized stack (db + api + web)
+Use `infra/docker-compose.yml` to run core services with health-gated startup.
+
+```bash
+DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml up --build -d
+```
+
+Deployment env var segregation:
+- `DEPLOY_ENV=dev|staging|prod` selects service env files under `infra/env/`.
+- Loaded files:
+  - `infra/env/<DEPLOY_ENV>.db.env`
+  - `infra/env/<DEPLOY_ENV>.api.env`
+  - `infra/env/<DEPLOY_ENV>.llm.env`
+  - `infra/env/<DEPLOY_ENV>.web.env`
+- Default when unset: `dev`.
+- For web build-time API URL, set `NEXT_PUBLIC_API_URL` in shell when building non-dev images.
+  Example: `DEPLOY_ENV=staging NEXT_PUBLIC_API_URL=https://api.staging.example.com docker compose -f infra/docker-compose.yml up --build -d`
+
+LLM provider segregation:
+- LLM provider and model/base URL are configured per env in `infra/env/<DEPLOY_ENV>.llm.env`.
+- To use OpenAI in an env, set `LLM_PROVIDER=openai` and provide `OPENAI_API_KEY` in that env file.
+
+Schema initialization:
+
+```bash
+DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml up --build -d
+```
+
+- Schema init runs via Postgres `docker-entrypoint-initdb.d` on first volume initialization and applies `infra/schema.template.sql` with the selected `PGVECTOR_DIM`.
+- Manual re-run is still available when needed:
+  `DEPLOY_ENV=dev bash infra/scripts/init_schema.sh`
+
+Service URLs:
+- Web: `http://localhost:3000`
+- API: `http://localhost:8000`
+- API readiness: `http://localhost:8000/health/ready`
+
+Enable observability profile (Prometheus + Grafana):
+
+```bash
+DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml --profile observability up -d
+```
+
+Observability URLs:
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001` (`admin` / `admin`)
+
+Notes:
+- Compose sets `EMBEDDINGS_PROVIDER=hash` for lightweight local startup.
+- `LLM_PROVIDER=ollama` is configured by default and expects Ollama on host `11434`.
+- Browser-side API URL is baked at web build time via `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`).
+
+Stop services:
+
+```bash
+DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml down
+```
+
+### Deployment health gate (5.4.1)
+Probe policy is documented in:
+- `infra/deployment/HEALTH_GATING_POLICY.md`
+
+Deploy-time smoke gate command (fails release on degraded readiness):
+
+```bash
+infra/scripts/deploy_health_gate.sh --api-url http://localhost:8000 --timeout-seconds 120 --interval-seconds 2
+```
+
+Evidence logging example:
+
+```bash
+set -o pipefail
+infra/scripts/deploy_health_gate.sh --api-url http://localhost:8000 --timeout-seconds 120 --interval-seconds 2 \
+  | tee "infra/evidence/5.4.1/dev-$(date +%Y%m%d-%H%M%S)-health-gate.log"
+```
+
 ### 1) Start the database (Postgres + pgvector)
 The docker compose file uses `pgvector/pgvector:pg16` with default credentials.
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+DEPLOY_ENV=dev docker compose -f infra/docker-compose.yml up -d
 ```
 
-Initialize the schema (tables + vector index) using the bundled SQL:
+Schema is initialized automatically only when `rag_pgdata` is first created (fresh DB volume).  
+If you need to re-apply it manually (idempotent):
 
 ```bash
-cat infra/schema.sql | docker compose -f infra/docker-compose.yml exec -T db psql -U rag -d rag
+DEPLOY_ENV=dev bash infra/scripts/init_schema.sh
 ```
 
 Default connection string:
@@ -164,4 +241,4 @@ Upload API and UI request/response contract is defined in:
 
 ### Troubleshooting
 - If embeddings fail, ensure your DB vector dimension matches the embeddings model
-  (the default schema uses `vector(384)` in `infra/schema.sql`).
+  (schema is rendered from `infra/schema.template.sql` using `PGVECTOR_DIM` in `infra/env/<DEPLOY_ENV>.db.env`).
