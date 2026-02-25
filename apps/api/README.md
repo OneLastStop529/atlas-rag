@@ -9,6 +9,7 @@
 - `DEPENDENCY_TIMEOUT_SECONDS` (default: `30`): Soft timeout budget for embeddings operations.
 - `EMBEDDINGS_HTTP_TIMEOUT_SECONDS` (default: `30`): TEI HTTP timeout.
 - `READINESS_CACHE_TTL_SECONDS` (default: `5`): Cache TTL for readiness response.
+- `EXPECTED_EMBEDDING_DIM` (optional): Fail readiness if provider embedding dim does not match this value.
 
 ## Health Endpoints
 - `GET /health` and `GET /health/live`: liveness.
