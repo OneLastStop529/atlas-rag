@@ -46,6 +46,23 @@ export type StreamSSEEvent =
   | { event: 'error'; data: { message: string } }
   | { event: string; data: Record<string, unknown> };
 
+const INVISIBLE_STREAM_CHARS = /[\u00AD\u200B\u200C\u200D\u2060\uFEFF]/g;
+const NON_BREAKING_SPACES = /[\u00A0\u202F]/g;
+
+function normalizeTokenDelta(delta: string): string {
+  return delta
+    .replace(INVISIBLE_STREAM_CHARS, "")
+    .replace(NON_BREAKING_SPACES, " ");
+}
+
+function mergeTokenDelta(content: string, rawDelta: string): string {
+  const delta = normalizeTokenDelta(rawDelta);
+  if (!delta) return content;
+
+  const dehyphenated = content.replace(/-\s+$/, "");
+  const collapsedBoundary = dehyphenated.replace(/[ \t]+$/, " ");
+  return collapsedBoundary + delta;
+}
 
 
 export function useChatSSE({
@@ -127,19 +144,14 @@ export function useChatSSE({
             case "token":
               const tokenData = data as { delta?: string };
               if (typeof tokenData.delta === 'string') {
-                const delta = tokenData.delta;
+                const delta = normalizeTokenDelta(tokenData.delta);
                 setMessages((msgs) => {
                   const lastIdx = msgs.length - 1;
                   const last = msgs[lastIdx];
                   if (!last || last.role !== "assistant") return msgs;
-                  const needsSpace =
-                    last.content.length > 0 &&
-                    !/\s$/.test(last.content) &&
-                    !/^\s/.test(delta) &&
-                    !/^[\]\)\.,!?;:]/.test(delta);
                   const updated = {
                     ...last,
-                    content: needsSpace ? `${last.content} ${delta}` : last.content + delta
+                    content: mergeTokenDelta(last.content, delta)
                   };
                   return [...msgs.slice(0, lastIdx), updated];
                 });
